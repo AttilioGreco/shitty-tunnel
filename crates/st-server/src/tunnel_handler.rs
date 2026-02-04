@@ -1,170 +1,179 @@
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::sync::Arc;
 
-use anyhow::Result;
-use futures_util::{SinkExt, StreamExt};
-use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot, Mutex};
-use tokio_util::codec::{FramedRead, FramedWrite};
+use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::StreamExt;
+use tonic::{Request, Response, Status, Streaming};
 
 use st_domain::model::request::ProxiedResponse;
-use st_protocol::codec::TunnelCodec;
-use st_protocol::message::TunnelMessage;
+use st_protocol::proto;
+use st_protocol::proto::shitty_tunnel_server::ShittyTunnel;
+use st_protocol::proto::{
+    client_message, server_message, AuthResponse, ClientMessage, ServerMessage,
+};
 
 use crate::app::{AppState, PendingRequest, TunnelHandle};
 
-pub async fn accept_loop(state: Arc<AppState>, listener: TcpListener) -> Result<()> {
-    loop {
-        let (stream, addr) = listener.accept().await?;
-        tracing::info!("tunnel connection from {addr}");
-        let state = state.clone();
-        tokio::spawn(async move {
-            if let Err(e) = handle_tunnel_connection(state, stream).await {
-                tracing::error!("tunnel error from {addr}: {e}");
-            }
-        });
+pub struct TunnelGrpcService {
+    state: Arc<AppState>,
+}
+
+impl TunnelGrpcService {
+    pub fn new(state: Arc<AppState>) -> Self {
+        Self { state }
     }
 }
 
-async fn handle_tunnel_connection(state: Arc<AppState>, stream: TcpStream) -> Result<()> {
-    let (read_half, write_half) = stream.into_split();
-    let mut reader = FramedRead::new(read_half, TunnelCodec);
-    let mut writer = FramedWrite::new(write_half, TunnelCodec);
+#[tonic::async_trait]
+impl ShittyTunnel for TunnelGrpcService {
+    type OpenTunnelStream =
+        Pin<Box<dyn tokio_stream::Stream<Item = Result<ServerMessage, Status>> + Send>>;
 
-    // --- Authentication ---
-    let auth_msg = reader
-        .next()
-        .await
-        .ok_or_else(|| anyhow::anyhow!("connection closed before auth"))??;
+    async fn open_tunnel(
+        &self,
+        request: Request<Streaming<ClientMessage>>,
+    ) -> Result<Response<Self::OpenTunnelStream>, Status> {
+        let mut in_stream = request.into_inner();
 
-    let (public_key, timestamp, signature) = match auth_msg {
-        TunnelMessage::AuthRequest {
-            public_key,
-            timestamp,
-            signature,
-        } => {
-            let sig: [u8; 64] = signature
-                .try_into()
-                .map_err(|_| anyhow::anyhow!("invalid signature length"))?;
-            (public_key, timestamp, sig)
+        // --- Authentication ---
+        let first_msg = in_stream
+            .next()
+            .await
+            .ok_or_else(|| Status::aborted("connection closed before auth"))?
+            .map_err(|e| Status::internal(format!("stream error: {e}")))?;
+
+        let auth_req = match first_msg.msg {
+            Some(client_message::Msg::AuthRequest(a)) => a,
+            _ => return Err(Status::invalid_argument("expected AuthRequest")),
+        };
+
+        let pk: [u8; 32] = auth_req
+            .public_key
+            .try_into()
+            .map_err(|_| Status::invalid_argument("public key must be 32 bytes"))?;
+        let sig: [u8; 64] = auth_req
+            .signature
+            .try_into()
+            .map_err(|_| Status::invalid_argument("signature must be 64 bytes"))?;
+
+        let peer = self
+            .state
+            .authenticator
+            .verify_peer(&pk, auth_req.timestamp, &sig)
+            .await
+            .map_err(|e| Status::unauthenticated(e.to_string()))?;
+
+        let domain = peer.domain;
+
+        // Check domain not already connected
+        {
+            let tunnels = self.state.tunnels.read().await;
+            if tunnels.contains_key(&domain) {
+                return Err(Status::already_exists(format!(
+                    "domain {domain} already has an active tunnel"
+                )));
+            }
         }
-        _ => anyhow::bail!("expected AuthRequest, got {:?}", auth_msg),
-    };
 
-    let peer = state
-        .authenticator
-        .verify_peer(&public_key, timestamp, &signature)
-        .await
-        .map_err(|e| anyhow::anyhow!("auth failed: {e}"))?;
+        tracing::info!("peer authenticated, tunnel active for {domain}");
 
-    let domain = peer.domain.clone();
+        // Create output channel for server -> client messages
+        let (out_tx, out_rx) = mpsc::channel::<Result<ServerMessage, Status>>(32);
 
-    // Check if domain already has an active tunnel
-    {
-        let tunnels = state.tunnels.read().await;
-        if tunnels.contains_key(&domain) {
-            writer
-                .send(TunnelMessage::AuthResponse {
-                    success: false,
-                    domain: None,
-                    server_public_key: state.authenticator.public_key(),
-                    server_signature: vec![0u8; 64],
-                })
-                .await?;
-            anyhow::bail!("domain {domain} already has an active tunnel");
-        }
-    }
+        // Send auth response
+        let server_sig = self
+            .state
+            .authenticator
+            .sign_challenge(&auth_req.timestamp.to_be_bytes());
+        out_tx
+            .send(Ok(ServerMessage {
+                msg: Some(server_message::Msg::AuthResponse(AuthResponse {
+                    success: true,
+                    domain: domain.clone(),
+                    server_public_key: self.state.authenticator.public_key().to_vec(),
+                    server_signature: server_sig.to_vec(),
+                })),
+            }))
+            .await
+            .map_err(|_| Status::internal("failed to send auth response"))?;
 
-    // Send auth response
-    let server_signature = state.authenticator.sign_challenge(&timestamp.to_be_bytes());
-    writer
-        .send(TunnelMessage::AuthResponse {
-            success: true,
-            domain: Some(domain.clone()),
-            server_public_key: state.authenticator.public_key(),
-            server_signature: server_signature.to_vec(),
-        })
-        .await?;
+        // Register tunnel
+        let (request_tx, mut request_rx) = mpsc::channel::<PendingRequest>(32);
+        self.state
+            .tunnels
+            .write()
+            .await
+            .insert(domain.clone(), TunnelHandle { request_tx });
 
-    tracing::info!("peer authenticated, tunnel active for {domain}");
+        // Pending responses map
+        let pending: Arc<Mutex<HashMap<u64, oneshot::Sender<ProxiedResponse>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
 
-    // --- Register tunnel ---
-    let (request_tx, mut request_rx) = mpsc::channel::<PendingRequest>(32);
-    state
-        .tunnels
-        .write()
-        .await
-        .insert(domain.clone(), TunnelHandle { request_tx });
+        let state = self.state.clone();
+        let domain_clone = domain.clone();
 
-    // Pending responses map: request_id -> oneshot sender
-    let pending: Arc<Mutex<HashMap<u64, oneshot::Sender<ProxiedResponse>>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+        // Spawn tunnel lifecycle task
+        tokio::spawn(async move {
+            let pending_read = pending.clone();
 
-    let pending_read = pending.clone();
-
-    // Task: read responses from client
-    let read_task = async {
-        while let Some(msg) = reader.next().await {
-            let msg = msg?;
-            match msg {
-                TunnelMessage::HttpResponse(resp) => {
-                    let request_id = resp.request_id;
-                    if let Some(tx) = pending_read.lock().await.remove(&request_id) {
-                        let _ = tx.send(resp);
-                    } else {
-                        tracing::warn!("received response for unknown request_id={request_id}");
+            let read_task = async {
+                while let Some(result) = in_stream.next().await {
+                    let msg = match result {
+                        Ok(m) => m,
+                        Err(e) => {
+                            tracing::error!("stream read error: {e}");
+                            break;
+                        }
+                    };
+                    match msg.msg {
+                        Some(client_message::Msg::HttpResponse(resp)) => {
+                            let domain_resp: ProxiedResponse = resp.into();
+                            let request_id = domain_resp.request_id;
+                            if let Some(tx) = pending_read.lock().await.remove(&request_id) {
+                                let _ = tx.send(domain_resp);
+                            } else {
+                                tracing::warn!("response for unknown request_id={request_id}");
+                            }
+                        }
+                        Some(client_message::Msg::Pong(_)) => {}
+                        _ => {}
                     }
                 }
-                TunnelMessage::Pong { .. } => {}
-                TunnelMessage::Disconnect { reason } => {
-                    tracing::info!("client disconnected: {reason}");
-                    break;
+            };
+
+            let write_task = async {
+                while let Some(pending_req) = request_rx.recv().await {
+                    let request_id = pending_req.request.request_id;
+                    pending
+                        .lock()
+                        .await
+                        .insert(request_id, pending_req.response_tx);
+
+                    let proto_req: proto::HttpRequest = pending_req.request.into();
+                    let msg = ServerMessage {
+                        msg: Some(server_message::Msg::HttpRequest(proto_req)),
+                    };
+
+                    if out_tx.send(Ok(msg)).await.is_err() {
+                        tracing::error!("failed to send request to client");
+                        pending.lock().await.remove(&request_id);
+                        break;
+                    }
                 }
-                other => {
-                    tracing::warn!("unexpected message from client: {other:?}");
-                }
-            }
-        }
-        Ok::<_, anyhow::Error>(())
-    };
+            };
 
-    // Task: forward requests to client
-    let write_task = async {
-        while let Some(pending_req) = request_rx.recv().await {
-            let request_id = pending_req.request.request_id;
-            pending
-                .lock()
-                .await
-                .insert(request_id, pending_req.response_tx);
+            tokio::select! {
+                _ = read_task => {}
+                _ = write_task => {}
+            }
 
-            if let Err(e) = writer
-                .send(TunnelMessage::HttpRequest(pending_req.request))
-                .await
-            {
-                tracing::error!("failed to send request to client: {e}");
-                pending.lock().await.remove(&request_id);
-                break;
-            }
-        }
-        Ok::<_, anyhow::Error>(())
-    };
+            state.tunnels.write().await.remove(&domain_clone);
+            tracing::info!("tunnel closed for {domain_clone}");
+        });
 
-    tokio::select! {
-        r = read_task => {
-            if let Err(e) = r {
-                tracing::error!("tunnel read error for {domain}: {e}");
-            }
-        }
-        r = write_task => {
-            if let Err(e) = r {
-                tracing::error!("tunnel write error for {domain}: {e}");
-            }
-        }
+        let output_stream = ReceiverStream::new(out_rx);
+        Ok(Response::new(Box::pin(output_stream) as Self::OpenTunnelStream))
     }
-
-    // Cleanup
-    state.tunnels.write().await.remove(&domain);
-    tracing::info!("tunnel closed for {domain}");
-
-    Ok(())
 }

@@ -33,6 +33,11 @@ axum = "0.8"
 http-body-util = "0.1"
 reqwest = { version = "0.12", features = ["http2"] }
 
+tonic = "0.12"
+prost = "0.13"
+tonic-build = "0.12"
+tokio-stream = "0.1"
+
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 

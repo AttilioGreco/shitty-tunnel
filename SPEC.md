@@ -96,13 +96,14 @@ shittyTunnel/
 │   │       │   └── proxy.rs        # LocalProxy trait
 │   │       └── error.rs            # DomainError enum
 │   │
-│   ├── st-protocol/                # Layer 2: Protocol
+│   ├── st-protocol/                # Layer 2: Protocol (gRPC/protobuf)
 │   │   ├── Cargo.toml
+│   │   ├── build.rs                # tonic_build per code generation
+│   │   ├── proto/
+│   │   │   └── tunnel.proto        # Definizione servizio gRPC + messaggi
 │   │   └── src/
-│   │       ├── lib.rs
-│   │       ├── message.rs          # TunnelMessage enum (wire types)
-│   │       ├── frame.rs            # Length-prefixed framing
-│   │       └── codec.rs            # tokio_util::codec per framing
+│   │       ├── lib.rs              # include_proto! + re-export
+│   │       └── convert.rs          # From impls proto <-> domain types
 │   │
 │   ├── st-infra/                   # Layer 3: Infrastructure
 │   │   ├── Cargo.toml

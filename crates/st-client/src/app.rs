@@ -1,15 +1,17 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
-use futures_util::{SinkExt, StreamExt};
-use tokio::net::TcpStream;
 use tokio::sync::mpsc;
-use tokio_util::codec::{FramedRead, FramedWrite};
+use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::StreamExt;
 
 use st_infra::config::client::ClientConfig;
 use st_infra::crypto::keys::KeyPair;
-use st_protocol::codec::TunnelCodec;
-use st_protocol::message::TunnelMessage;
+use st_protocol::proto;
+use st_protocol::proto::shitty_tunnel_client::ShittyTunnelClient;
+use st_protocol::proto::{
+    client_message, server_message, AuthRequest, ClientMessage, ServerMessage,
+};
 
 use crate::forwarder;
 
@@ -21,11 +23,7 @@ pub struct ClientApp {
 
 impl ClientApp {
     pub async fn run(&self) -> Result<()> {
-        let reconnect = self
-            .config
-            .reconnect
-            .clone()
-            .unwrap_or_default();
+        let reconnect = self.config.reconnect.clone().unwrap_or_default();
 
         let mut delay = Duration::from_millis(reconnect.initial_delay_ms);
         let max_delay = Duration::from_millis(reconnect.max_delay_ms);
@@ -52,18 +50,19 @@ impl ClientApp {
     }
 
     async fn connect_and_serve(&self) -> Result<()> {
-        let addr = format!(
-            "{}:{}",
+        let endpoint = format!(
+            "http://{}:{}",
             self.config.client.server_host, self.config.client.server_port
         );
 
-        tracing::info!("connecting to {addr}");
-        let stream = TcpStream::connect(&addr).await?;
-        tracing::info!("connected to {addr}");
+        tracing::info!("connecting to {endpoint}");
 
-        let (read_half, write_half) = stream.into_split();
-        let mut reader = FramedRead::new(read_half, TunnelCodec);
-        let mut writer = FramedWrite::new(write_half, TunnelCodec);
+        let mut client = ShittyTunnelClient::connect(endpoint.clone()).await?;
+
+        tracing::info!("connected to {endpoint}");
+
+        // Create outgoing channel (client -> server)
+        let (out_tx, out_rx) = mpsc::channel::<ClientMessage>(32);
 
         // --- Authentication ---
         let timestamp = SystemTime::now()
@@ -73,58 +72,67 @@ impl ClientApp {
 
         let signature = self.key_pair.sign(&timestamp.to_be_bytes());
 
-        writer
-            .send(TunnelMessage::AuthRequest {
-                public_key: self.key_pair.public_key_bytes(),
-                timestamp,
-                signature: signature.to_vec(),
+        out_tx
+            .send(ClientMessage {
+                msg: Some(client_message::Msg::AuthRequest(AuthRequest {
+                    public_key: self.key_pair.public_key_bytes().to_vec(),
+                    timestamp,
+                    signature: signature.to_vec(),
+                })),
             })
             .await?;
 
-        let auth_resp = reader
+        // Start bidirectional stream
+        let response = client
+            .open_tunnel(ReceiverStream::new(out_rx))
+            .await?;
+
+        let mut in_stream = response.into_inner();
+
+        // Read auth response
+        let first_msg = in_stream
             .next()
             .await
             .ok_or_else(|| anyhow::anyhow!("connection closed during auth"))??;
 
-        let domain = match auth_resp {
-            TunnelMessage::AuthResponse {
-                success: true,
-                domain: Some(domain),
-                server_public_key,
-                server_signature,
-            } => {
+        let domain = match first_msg.msg {
+            Some(server_message::Msg::AuthResponse(auth_resp)) => {
+                if !auth_resp.success {
+                    anyhow::bail!("server rejected authentication");
+                }
+
                 // Verify server identity
-                if server_public_key != self.server_public_key {
+                let server_pk: [u8; 32] = auth_resp
+                    .server_public_key
+                    .try_into()
+                    .map_err(|_| anyhow::anyhow!("invalid server public key length"))?;
+
+                if server_pk != self.server_public_key {
                     anyhow::bail!("server public key mismatch");
                 }
-                let sig: [u8; 64] = server_signature
+
+                let sig: [u8; 64] = auth_resp
+                    .server_signature
                     .try_into()
                     .map_err(|_| anyhow::anyhow!("invalid server signature length"))?;
-                let valid = st_infra::crypto::keys::verify_signature(
-                    &server_public_key,
+
+                if !st_infra::crypto::keys::verify_signature(
+                    &server_pk,
                     &timestamp.to_be_bytes(),
                     &sig,
-                );
-                if !valid {
+                ) {
                     anyhow::bail!("server signature invalid");
                 }
-                domain
+
+                auth_resp.domain
             }
-            TunnelMessage::AuthResponse {
-                success: false, ..
-            } => {
-                anyhow::bail!("server rejected authentication");
-            }
-            other => {
-                anyhow::bail!("unexpected auth response: {other:?}");
-            }
+            _ => anyhow::bail!("expected AuthResponse"),
         };
 
         tracing::info!("authenticated, tunnel active for {domain}");
         tracing::info!(
             "forwarding to {}:{}",
-            self.config.local.host,
-            self.config.local.port
+            self.config.local.host, self.config.local.port
         );
 
         // --- Tunnel active ---
@@ -133,55 +141,42 @@ impl ClientApp {
             self.config.local.host, self.config.local.port
         );
 
-        let http_client = reqwest::Client::builder()
-            .no_proxy()
-            .build()?;
+        let http_client = reqwest::Client::builder().no_proxy().build()?;
 
-        let (response_tx, mut response_rx) = mpsc::channel::<TunnelMessage>(32);
-
-        // Task: read requests from server, spawn forwarding tasks
-        let read_task = {
-            let response_tx = response_tx.clone();
-            let http_client = http_client.clone();
-            let local_url = local_url.clone();
-            async move {
-                while let Some(msg) = reader.next().await {
-                    let msg = msg?;
-                    match msg {
-                        TunnelMessage::HttpRequest(req) => {
-                            let tx = response_tx.clone();
-                            let client = http_client.clone();
-                            let url = local_url.clone();
-                            tokio::spawn(async move {
-                                let resp = forwarder::forward(&client, &url, req).await;
-                                let _ = tx.send(TunnelMessage::HttpResponse(resp)).await;
-                            });
-                        }
-                        TunnelMessage::Ping { nonce } => {
-                            let _ = response_tx.send(TunnelMessage::Pong { nonce }).await;
-                        }
-                        TunnelMessage::Disconnect { reason } => {
-                            tracing::info!("server disconnect: {reason}");
-                            break;
-                        }
-                        _ => {}
-                    }
+        // Read messages from server, spawn forwarding tasks
+        while let Some(result) = in_stream.next().await {
+            let msg: ServerMessage = result?;
+            match msg.msg {
+                Some(server_message::Msg::HttpRequest(req)) => {
+                    let tx = out_tx.clone();
+                    let client = http_client.clone();
+                    let url = local_url.clone();
+                    tokio::spawn(async move {
+                        let domain_req = req.into();
+                        let resp = forwarder::forward(&client, &url, domain_req).await;
+                        let proto_resp: proto::HttpResponse = resp.into();
+                        let _ = tx
+                            .send(ClientMessage {
+                                msg: Some(client_message::Msg::HttpResponse(proto_resp)),
+                            })
+                            .await;
+                    });
                 }
-                Ok::<_, anyhow::Error>(())
+                Some(server_message::Msg::Ping(ping)) => {
+                    let _ = out_tx
+                        .send(ClientMessage {
+                            msg: Some(client_message::Msg::Pong(proto::Pong {
+                                nonce: ping.nonce,
+                            })),
+                        })
+                        .await;
+                }
+                Some(server_message::Msg::Disconnect(d)) => {
+                    tracing::info!("server disconnect: {}", d.reason);
+                    break;
+                }
+                _ => {}
             }
-        };
-
-        // Task: write responses back to server
-        let write_task = async move {
-            while let Some(msg) = response_rx.recv().await {
-                writer.send(msg).await?;
-            }
-            Ok::<_, anyhow::Error>(())
-        };
-
-        tokio::select! {
-            r = read_task => r?,
-            r = write_task => r?,
         }
 
         Ok(())
