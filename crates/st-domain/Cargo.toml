@@ -1,0 +1,9 @@
+[package]
+name = "st-domain"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }

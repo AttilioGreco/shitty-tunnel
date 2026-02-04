@@ -1,0 +1,12 @@
+[package]
+name = "st-protocol"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+st-domain = { workspace = true }
+serde = { workspace = true }
+bincode = { workspace = true }
+bytes = { workspace = true }
+tokio-util = { workspace = true }
+thiserror = { workspace = true }

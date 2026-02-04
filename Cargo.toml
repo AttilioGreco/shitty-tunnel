@@ -1,0 +1,44 @@
+[workspace]
+members = [
+    "crates/st-domain",
+    "crates/st-protocol",
+    "crates/st-infra",
+    "crates/st-server",
+    "crates/st-client",
+    "crates/st-keygen",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[workspace.dependencies]
+st-domain = { path = "crates/st-domain" }
+st-protocol = { path = "crates/st-protocol" }
+st-infra = { path = "crates/st-infra" }
+
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["codec"] }
+futures-util = { version = "0.3", features = ["sink"] }
+async-trait = "0.1"
+
+serde = { version = "1", features = ["derive"] }
+bincode = "1"
+toml = "0.8"
+base64 = "0.22"
+bytes = "1"
+
+axum = "0.8"
+http-body-util = "0.1"
+reqwest = { version = "0.12", features = ["http2"] }
+
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+rand = "0.8"
+
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+clap = { version = "4", features = ["derive"] }
+thiserror = "2"
+anyhow = "1"
