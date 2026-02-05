@@ -1,0 +1,10 @@
+# Rust build output
+target/
+
+# VCS, editor cruft
+.git/
+*.swp
+*.rs.bk
+.DS_Store
+editorconfig
+gitattributes

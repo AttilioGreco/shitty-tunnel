@@ -1620,6 +1620,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "shitty-tunnel"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum 0.8.8",
+ "base64",
+ "clap",
+ "http-body-util",
+ "reqwest",
+ "st-domain",
+ "st-infra",
+ "st-protocol",
+ "tokio",
+ "tokio-stream",
+ "toml",
+ "tonic",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1687,24 +1708,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "st-client"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "reqwest",
- "st-domain",
- "st-infra",
- "st-protocol",
- "tokio",
- "tokio-stream",
- "toml",
- "tonic",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "st-domain"
 version = "0.1.0"
 dependencies = [
@@ -1728,13 +1731,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "st-keygen"
-version = "0.1.0"
-dependencies = [
- "st-infra",
-]
-
-[[package]]
 name = "st-protocol"
 version = "0.1.0"
 dependencies = [
@@ -1742,26 +1738,6 @@ dependencies = [
  "st-domain",
  "tonic",
  "tonic-build",
-]
-
-[[package]]
-name = "st-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum 0.8.8",
- "base64",
- "clap",
- "http-body-util",
- "st-domain",
- "st-infra",
- "st-protocol",
- "tokio",
- "tokio-stream",
- "toml",
- "tonic",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

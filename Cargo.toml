@@ -3,9 +3,7 @@ members = [
     "crates/st-domain",
     "crates/st-protocol",
     "crates/st-infra",
-    "crates/st-server",
-    "crates/st-client",
-    "crates/st-keygen",
+    "crates/shitty-tunnel",
 ]
 resolver = "2"
 
