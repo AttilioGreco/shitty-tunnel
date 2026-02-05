@@ -1,0 +1,19 @@
+[server]
+public_port = 8080          # porta HTTP pubblica (riceve da nginx/ingress)
+tunnel_port = 8443          # porta gRPC per tunnel client
+private_key = "axjhCqieuY3cU6qpRA48FSjKlojaH5+Q5kjm5aLwdfc="  # chiave privata del server
+
+# Opzionale: TLS nativo sul tunnel_port (se non usi ingress)
+# [server.tls]
+# enabled = false
+# cert_path = "/path/to/cert.pem"
+# key_path = "/path/to/key.pem"
+
+# Lista client autorizzati (uno per sviluppatore)
+[[peers]]
+public_key = "ZlsOtT/650gpT8XrPzNJOT4yyuJoYfngRnbRBBHknYE="
+domain = "dev1.example.com"
+
+# [[peers]]
+# public_key = "altra_chiave_pubblica_client"
+# domain = "dev2.example.com"

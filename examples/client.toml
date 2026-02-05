@@ -1,0 +1,14 @@
+[client]
+server_host = "tunnel.example.com"  # hostname del server (o IP)
+server_port = 8443                   # porta gRPC tunnel del server
+private_key = "PATS7QnQD+LMGDez8EDi0YCvVx1zjWs1nSu3HjFZ3Fg="  # chiave privata del client
+server_public_key = "P1j5jRykDgudgNJNnrJVXHx85W3koAapuyCnCKcq8XM="  # chiave pubblica del server
+
+[local]
+host = "127.0.0.1"
+port = 3000  # porta del tuo servizio locale
+
+[reconnect]
+enabled = true
+initial_delay_ms = 1000
+max_delay_ms = 30000  # backoff esponenziale: 1s, 2s, 4s, 8s, 16s, 30s...
