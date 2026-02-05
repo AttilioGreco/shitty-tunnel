@@ -1,0 +1,43 @@
+[workspace]
+members = ["cargo:."]
+
+# Config for 'dist'
+[dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
+cargo-dist-version = "0.30.3"
+# CI backends to support
+ci = "github"
+# The installers to generate for each app
+installers = ["shell", "powershell", "homebrew"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = [
+    # Linux x86_64
+    "x86_64-unknown-linux-gnu",      # glibc (Debian/Ubuntu/Fedora)
+    "x86_64-unknown-linux-musl",     # musl static (universal Linux)
+    # Linux ARM64
+    "aarch64-unknown-linux-gnu",     # glibc (Raspberry Pi 4/5, ARM servers)
+    "aarch64-unknown-linux-musl",    # musl static (universal ARM)
+    # macOS
+    "x86_64-apple-darwin",           # Intel Mac
+    "aarch64-apple-darwin",          # Apple Silicon (M1/M2/M3)
+    # Windows
+    "x86_64-pc-windows-msvc",        # Windows x64
+]
+# Whether to consider the binaries in a package for distribution (defaults to true)
+dist = true
+# Whether to auto-include files like README and LICENSE
+auto-includes = true
+# Publish jobs to run in CI
+pr-run-mode = "skip"
+
+# System dependencies needed for build
+[dist.dependencies.homebrew]
+protobuf = '*'
+
+[dist.dependencies.apt]
+protobuf-compiler = '*'
+libssl-dev = '*'
+pkg-config = '*'
+
+[dist.dependencies.chocolatey]
+protoc = '*'
