@@ -22,4 +22,10 @@ pub enum DomainError {
 
     #[error("protocol error: {0}")]
     ProtocolError(String),
+
+    #[error("peer already exists")]
+    PeerAlreadyExists,
+
+    #[error("peer not found")]
+    PeerNotFound,
 }

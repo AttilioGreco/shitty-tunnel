@@ -8,9 +8,12 @@ use tokio::sync::RwLock;
 
 use st_domain::model::peer::PeerIdentity;
 use st_domain::port::auth::Authenticator;
+use st_domain::port::peer::PeerRepository;
+use st_infra::config::provider::FileServerConfigProvider;
 use st_infra::config::server::ServerConfig;
 use st_infra::crypto::auth::Ed25519Authenticator;
 use st_infra::crypto::keys::KeyPair;
+use st_infra::peer::in_memory::InMemoryPeerRepository;
 
 pub async fn run_server(config_path: PathBuf) -> Result<()> {
     let config_str = std::fs::read_to_string(&config_path)
@@ -24,7 +27,7 @@ pub async fn run_server(config_path: PathBuf) -> Result<()> {
     let key_pair = KeyPair::from_base64(&config.server.private_key)
         .context("invalid server private key")?;
 
-    let allowed_peers: Vec<PeerIdentity> = config
+    let initial_peers: Vec<PeerIdentity> = config
         .peers
         .iter()
         .map(|p| {
@@ -41,13 +44,19 @@ pub async fn run_server(config_path: PathBuf) -> Result<()> {
         })
         .collect::<Result<Vec<_>>>()?;
 
+    let peer_repository: Arc<dyn PeerRepository> =
+        Arc::new(InMemoryPeerRepository::new(initial_peers));
+
     let authenticator: Arc<dyn Authenticator> =
-        Arc::new(Ed25519Authenticator::new(key_pair, allowed_peers));
+        Arc::new(Ed25519Authenticator::new(key_pair, peer_repository.clone()));
+
+    let config_provider = Arc::new(FileServerConfigProvider::from_settings(&config.server));
 
     let state = Arc::new(crate::app::AppState {
         tunnels: RwLock::new(HashMap::new()),
         authenticator,
-        config,
+        peer_repository,
+        config: config_provider,
     });
 
     crate::app::run(state).await

@@ -6,13 +6,15 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 
 use st_domain::model::request::{ProxiedRequest, ProxiedResponse};
 use st_domain::port::auth::Authenticator;
-use st_infra::config::server::ServerConfig;
+use st_domain::port::config::ServerConfigProvider;
+use st_domain::port::peer::PeerRepository;
 use st_protocol::proto::shitty_tunnel_server::ShittyTunnelServer;
 
 pub struct AppState {
     pub tunnels: RwLock<HashMap<String, TunnelHandle>>,
     pub authenticator: Arc<dyn Authenticator>,
-    pub config: ServerConfig,
+    pub peer_repository: Arc<dyn PeerRepository>,
+    pub config: Arc<dyn ServerConfigProvider>,
 }
 
 pub struct TunnelHandle {
@@ -25,9 +27,9 @@ pub struct PendingRequest {
 }
 
 pub async fn run(state: Arc<AppState>) -> Result<()> {
-    let public_addr = format!("0.0.0.0:{}", state.config.server.public_port);
-    let tunnel_addr: std::net::SocketAddr = format!("0.0.0.0:{}", state.config.server.tunnel_port)
-        .parse()?;
+    let public_addr = format!("0.0.0.0:{}", state.config.public_port());
+    let tunnel_addr: std::net::SocketAddr =
+        format!("0.0.0.0:{}", state.config.tunnel_port()).parse()?;
 
     let public_listener = tokio::net::TcpListener::bind(&public_addr).await?;
     tracing::info!("public HTTP listening on {}", public_addr);

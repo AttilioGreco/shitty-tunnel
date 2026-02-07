@@ -2,12 +2,12 @@
 name = "shitty-tunnel"
 version.workspace = true
 edition.workspace = true
-description = "Self-hosted HTTP tunnel - ngrok alternative"
+description = "Self-hosted HTTP tunnel"
 authors = ["Your Name <your.email@example.com>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/yourusername/shittyTunnel"
 homepage = "https://github.com/yourusername/shittyTunnel"
-keywords = ["tunnel", "ngrok", "reverse-proxy", "grpc"]
+keywords = ["tunnel", "reverse-proxy", "grpc"]
 categories = ["network-programming", "command-line-utilities"]
 
 [[bin]]
