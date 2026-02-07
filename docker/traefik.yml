@@ -1,0 +1,23 @@
+# Traefik v3 - Static Configuration
+api:
+  dashboard: true
+  insecure: true  # Dashboard su :8080/dashboard/
+
+log:
+  level: INFO
+
+entryPoints:
+  web:
+    address: ":5000"  # Porta pubblica per il traffico tunnelato
+
+  traefik:
+    address: ":8081"  # Dashboard e API
+
+providers:
+  docker:
+    exposedByDefault: false
+    network: shitty-tunnel-net
+
+  file:
+    filename: /etc/traefik/dynamic.yml
+    watch: true

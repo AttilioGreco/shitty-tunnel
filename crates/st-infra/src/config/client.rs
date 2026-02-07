@@ -10,7 +10,8 @@ pub struct ClientConfig {
 #[derive(Debug, Deserialize)]
 pub struct ClientSettings {
     pub server_host: String,
-    pub server_port: u16,
+    #[serde(default)]
+    pub server_port: Option<u16>,
     pub private_key: String,
     pub server_public_key: String,
 }

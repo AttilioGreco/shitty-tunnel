@@ -50,10 +50,38 @@ impl ClientApp {
     }
 
     async fn connect_and_serve(&self) -> Result<()> {
-        let endpoint = format!(
-            "http://{}:{}",
-            self.config.client.server_host, self.config.client.server_port
-        );
+        // Build endpoint URL - parse server_host as full URL if it contains schema
+        let endpoint = if self.config.client.server_host.contains("://") {
+            // Parse as full URL
+            let parsed = url::Url::parse(&self.config.client.server_host)
+                .map_err(|e| anyhow::anyhow!("invalid server URL: {}", e))?;
+
+            let scheme = parsed.scheme();
+            let host = parsed
+                .host_str()
+                .ok_or_else(|| anyhow::anyhow!("missing host in server URL"))?;
+
+            // Use port from URL if present, otherwise use default for scheme
+            let port = parsed.port().unwrap_or_else(|| {
+                if scheme == "https" {
+                    443
+                } else {
+                    80
+                }
+            });
+
+            format!("{}://{}:{}", scheme, host, port)
+        } else {
+            // No schema in server_host, build URL from separate host + port
+            let port = self
+                .config
+                .client
+                .server_port
+                .ok_or_else(|| anyhow::anyhow!("server_port is required when server_host is not a full URL"))?;
+
+            let scheme = if port == 443 { "https" } else { "http" };
+            format!("{}://{}:{}", scheme, self.config.client.server_host, port)
+        };
 
         tracing::info!("connecting to {endpoint}");
 

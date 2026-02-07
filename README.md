@@ -100,10 +100,51 @@ shitty-tunnel client
 curl -H "Host: dev1.example.com" http://your-server:8080/
 ```
 
+## Docker Development Setup
+
+Quickly test shittyTunnel locally with Docker Compose + Traefik:
+
+> **Note:** This project uses [`just`](https://github.com/casey/just) instead of `make`
+> Install: `cargo install just`
+
+```bash
+# Start everything (Traefik + Server + Client + Test app)
+just up
+
+# Test the tunnel
+curl -H "Host: test.localhost" http://localhost:5000
+
+# View logs
+just logs
+
+# Stop
+just down
+```
+
+See [docker/README.md](docker/README.md) for complete Docker setup guide.
+
+## Development
+
+This project uses [`just`](https://github.com/casey/just) as task runner:
+
+```bash
+# Install just
+cargo install just
+
+# Show all available tasks
+just --list
+
+# Common tasks
+just build           # Build debug
+just release         # Build release
+just test            # Run tests
+just up              # Start Docker environment (hot-reload)
+```
+
 ## Documentation
 
 - [Examples & Setup Guide](examples/README.md)
-- [Build & Release](BUILD.md)
+- [Docker Setup](docker/README.md)
 - [Architecture Spec](SPEC.md)
 
 ## Architecture

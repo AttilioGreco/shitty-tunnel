@@ -1,0 +1,23 @@
+# Dockerfile per sviluppo con hot-reload (cargo-watch)
+FROM rust:1-alpine
+
+# Installa dipendenze + cargo-watch
+RUN apk add --no-cache musl-dev protobuf-dev protoc && \
+    cargo install cargo-watch
+
+WORKDIR /app
+
+# Copia tutto il workspace
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+
+# Pre-compila le dipendenze per velocizzare il primo avvio
+RUN cargo build --bin shitty-tunnel
+
+# Espone le porte
+EXPOSE 8080 8443
+
+# cargo-watch: ricompila e riavvia al cambio dei file .rs e .toml
+# Usa shell per espandere la variabile CARGO_WATCH_ARGS
+ENTRYPOINT ["/bin/sh", "-c"]
+CMD ["cargo watch -x \"run --bin shitty-tunnel -- $CARGO_WATCH_ARGS\""]

@@ -1,0 +1,75 @@
+services:
+  # Traefik v3 - Reverse Proxy
+  traefik:
+    image: traefik:v3
+    container_name: shitty-traefik
+    restart: unless-stopped
+    ports:
+      - "5000:5000"   # HTTP pubblico (traffico tunnelato)
+      - "8081:8081"   # Dashboard Traefik
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./docker/traefik-dynamic.yml:/etc/traefik/dynamic.yml:ro
+    networks:
+      - shitty-tunnel-net
+
+  # shittyTunnel Server (con hot-reload)
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: shitty-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # HTTP public port
+      - "8443:8443"   # gRPC tunnel port
+    volumes:
+      - .:/app:cached
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache:/app/target
+      - ./docker/server.toml:/etc/shittyTunnel/server.toml:ro
+    environment:
+      - RUST_LOG=info,shitty_tunnel=debug
+      - CARGO_WATCH_ARGS=server --config /etc/shittyTunnel/server.toml
+    networks:
+      - shitty-tunnel-net
+
+  # shittyTunnel Client (con hot-reload)
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: shitty-client
+    restart: unless-stopped
+    volumes:
+      - .:/app:cached
+      - cargo-cache:/usr/local/cargo/registry
+      - target-cache:/app/target
+      - ./docker/client.toml:/etc/shittyTunnel/client.toml:ro
+    environment:
+      - RUST_LOG=info,shitty_tunnel=debug
+      - CARGO_WATCH_ARGS=client --config /etc/shittyTunnel/client.toml
+    depends_on:
+      - server
+    networks:
+      - shitty-tunnel-net
+
+  # App di test HTTP
+  whoami:
+    image: traefik/whoami:latest
+    container_name: shitty-whoami
+    restart: unless-stopped
+    environment:
+      - WHOAMI_PORT_NUMBER=80
+      - WHOAMI_NAME=TestApp
+    networks:
+      - shitty-tunnel-net
+
+networks:
+  shitty-tunnel-net:
+    driver: bridge
+
+volumes:
+  cargo-cache:
+  target-cache:

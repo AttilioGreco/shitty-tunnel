@@ -1,0 +1,16 @@
+# Traefik v3 - Dynamic Configuration
+http:
+  routers:
+    tunnel-router:
+      rule: "HostRegexp(`^.+$`)"  # Match tutti gli host
+      service: shitty-server
+      entryPoints:
+        - web
+      priority: 1
+
+  services:
+    shitty-server:
+      loadBalancer:
+        servers:
+          - url: "http://server:8080"
+        passHostHeader: true

@@ -1,0 +1,14 @@
+[client]
+# Connessione al server (hostname Docker interno)
+server_host = "http://server:8443"
+private_key = "TWDhmcIowQnCyWB6OXSvh/RwncNqA3Baiv4UOizXHeY="       # chiave privata del client
+server_public_key = "4c81na95sfYK18g66ZZFdjW1Rjx1l8uHUq/5vrxSM9c="  # chiave pubblica del server
+
+[local]
+host = "whoami"  # hostname del container whoami
+port = 80        # porta HTTP del servizio whoami
+
+[reconnect]
+enabled = true
+initial_delay_ms = 1000
+max_delay_ms = 30000  # backoff esponenziale: 1s, 2s, 4s, 8s, 16s, 30s...

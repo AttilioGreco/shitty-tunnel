@@ -1,6 +1,13 @@
 [client]
-server_host = "tunnel.example.com"  # hostname del server (o IP)
-server_port = 8443                   # porta gRPC tunnel del server
+# Hostname o URL del server
+# Opzione 1: URL completo (raccomandato) - server_port opzionale
+#   server_host = "https://tunnel.example.com:443"
+#   server_host = "http://tunnel.example.com:8088"
+# Opzione 2: host separato + porta (auto-detect http/https)
+#   server_host = "tunnel.example.com"
+#   server_port = 443  # obbligatorio se server_host non è un URL completo
+server_host = "tunnel.example.com"
+server_port = 8443
 private_key = "PATS7QnQD+LMGDez8EDi0YCvVx1zjWs1nSu3HjFZ3Fg="  # chiave privata del client
 server_public_key = "P1j5jRykDgudgNJNnrJVXHx85W3koAapuyCnCKcq8XM="  # chiave pubblica del server
 

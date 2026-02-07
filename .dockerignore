@@ -1,10 +1,40 @@
 # Rust build output
 target/
+build/
 
-# VCS, editor cruft
+# VCS
 .git/
+.gitignore
+.gitattributes
+
+# Editor cruft
 *.swp
+*.swo
 *.rs.bk
+*~
 .DS_Store
-editorconfig
-gitattributes
+.vscode/
+.idea/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Docker files (non servono nel build context)
+docker-compose*.yml
+.dockerignore
+docker/
+
+# Documentation (esempi e docs non servono nel container)
+examples/
+docs/
+*.md
+!README.md
+
+# Environment
+.env
+.env.*
+
+# Misc
+dist/
+*.log

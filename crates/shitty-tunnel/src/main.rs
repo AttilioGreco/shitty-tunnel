@@ -65,9 +65,14 @@ async fn run_client(config_path: std::path::PathBuf) -> Result<()> {
     let key_pair =
         KeyPair::from_base64(&config.client.private_key).context("invalid client private key")?;
 
-    let server_pk = KeyPair::from_base64(&config.client.server_public_key)
-        .context("invalid server public key")?;
-    let server_public_key = server_pk.public_key_bytes();
+    let server_public_key: [u8; 32] = {
+        use base64::Engine;
+        base64::prelude::BASE64_STANDARD
+            .decode(config.client.server_public_key.trim())
+    }
+        .context("invalid server public key base64")?
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("server public key must be 32 bytes"))?;
 
     let client_app = Arc::new(client_app::ClientApp {
         config,
