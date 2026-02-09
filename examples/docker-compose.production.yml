@@ -1,0 +1,93 @@
+version: '3.8'
+
+# Production Docker Compose example using published ghcr.io images
+# This setup assumes you have nginx or Traefik in front of the server
+
+services:
+  # ShittyTunnel Server
+  shitty-tunnel-server:
+    image: ghcr.io/agreco/shittytunnel:latest
+    container_name: shitty-tunnel-server
+    restart: unless-stopped
+
+    # Ports
+    ports:
+      - "8080:8080"   # HTTP public endpoint (behind nginx/traefik)
+      - "50051:50051" # gRPC tunnel endpoint
+
+    # Configuration
+    volumes:
+      - ./server.toml:/etc/shittyTunnel/server.toml:ro
+
+    command: ["server", "--config", "/etc/shittyTunnel/server.toml"]
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z localhost 8080 && nc -z localhost 50051"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    networks:
+      - shitty-tunnel-net
+
+  # ShittyTunnel Client (example)
+  # Uncomment and configure for your use case
+  # shitty-tunnel-client:
+  #   image: ghcr.io/agreco/shittytunnel:latest
+  #   container_name: shitty-tunnel-client
+  #   restart: unless-stopped
+  #
+  #   volumes:
+  #     - ./client.toml:/home/shitty/.config/shittyTunnel.toml:ro
+  #
+  #   command: ["client", "--config", "/home/shitty/.config/shittyTunnel.toml"]
+  #
+  #   # If forwarding to a local service in the same compose stack
+  #   depends_on:
+  #     - shitty-tunnel-server
+  #
+  #   networks:
+  #     - shitty-tunnel-net
+
+  # Example: nginx reverse proxy in front of the server
+  nginx:
+    image: nginx:alpine
+    container_name: shitty-tunnel-nginx
+    restart: unless-stopped
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+
+    depends_on:
+      - shitty-tunnel-server
+
+    networks:
+      - shitty-tunnel-net
+
+networks:
+  shitty-tunnel-net:
+    driver: bridge

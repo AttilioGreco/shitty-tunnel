@@ -6,16 +6,16 @@
 
 A self-hosted ngrok alternative written in Rust, exposing local services to the internet through secure tunnels.
 
-## ✨ Features
+## Features
 
-- 🔒 **Ed25519 Authentication** - WireGuard-style mutual authentication with anti-replay protection
-- 🚀 **gRPC Transport** - High-performance bidirectional streaming with protobuf
-- 🏗️ **Clean Architecture** - Domain-driven design with clear separation of concerns
-- 🐳 **Docker Support** - Multi-arch images (amd64/arm64) available on ghcr.io
-- 🔄 **Auto-Reconnect** - Client reconnects with exponential backoff
-- 📦 **Cross-Platform** - Binaries available for Linux, macOS, and Windows
+- **Ed25519 Authentication** - WireGuard-style mutual authentication with anti-replay protection
+- **gRPC Transport** - High-performance bidirectional streaming with protobuf
+- **Clean Architecture** - Domain-driven design with clear separation of concerns
+- **Docker Support** - Multi-arch images (amd64/arm64) available on ghcr.io
+- **Auto-Reconnect** - Client reconnects with exponential backoff
+- **Cross-Platform** - Binaries available for Linux, macOS, and Windows
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Using Docker (Recommended)
 
@@ -57,7 +57,7 @@ cargo build --release
 - [Configuration Examples](examples/)
 - [Release Checklist](.github/RELEASE_CHECKLIST.md)
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 st-domain     → Core business logic (entities, value objects)
@@ -68,14 +68,14 @@ st-client     → Client binary
 st-keygen     → Key generation utility
 ```
 
-## 🔐 Security
+## Security
 
 - **Ed25519 signatures** for authentication
 - **Timestamp-based anti-replay** (±30s window)
 - **Mutual authentication** between client and server
 - **Automated vulnerability scanning** with Trivy
 
-## 📝 License
+## License
 
 Licensed under either of:
 
@@ -84,6 +84,6 @@ Licensed under either of:
 
 at your option.
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
