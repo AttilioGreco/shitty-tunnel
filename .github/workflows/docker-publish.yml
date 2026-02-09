@@ -14,7 +14,6 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   # Build images in parallel for each architecture
@@ -26,6 +25,10 @@ jobs:
           - linux/amd64
           - linux/arm64
     steps:
+      - name: Set lowercase image name
+        id: image-name
+        run: echo "value=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -65,7 +68,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=build-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=build-${{ matrix.platform }}
-          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ steps.image-name.outputs.value }},push-by-digest=true,name-canonical=true,push=true
           provenance: false
 
       - name: Export digest
@@ -90,6 +93,10 @@ jobs:
       version: ${{ steps.meta.outputs.version }}
       tags: ${{ steps.meta.outputs.tags }}
     steps:
+      - name: Set lowercase image name
+        id: image-name
+        run: echo "value=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Download digests
         uses: actions/download-artifact@v4
         with:
@@ -111,7 +118,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ steps.image-name.outputs.value }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -122,33 +129,37 @@ jobs:
         working-directory: /tmp/digests
         run: |
           docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+            $(printf '${{ env.REGISTRY }}/${{ steps.image-name.outputs.value }}@sha256:%s ' *)
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ steps.image-name.outputs.value }}:${{ steps.meta.outputs.version }}
 
       - name: Output image info
         run: |
           echo "Image pushed successfully:"
           echo "Registry: ${{ env.REGISTRY }}"
-          echo "Image: ${{ env.IMAGE_NAME }}"
+          echo "Image: ${{ steps.image-name.outputs.value }}"
           echo "Version: ${{ steps.meta.outputs.version }}"
           echo "Tags: ${{ steps.meta.outputs.tags }}"
           echo ""
           echo "Pull with:"
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}"
+          echo "docker pull ${{ env.REGISTRY }}/${{ steps.image-name.outputs.value }}:${{ steps.meta.outputs.version }}"
 
   # Security scanning
   scan:
     runs-on: ubuntu-22.04
     needs: merge
     steps:
+      - name: Set lowercase image name
+        id: image-name
+        run: echo "value=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         continue-on-error: true
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.merge.outputs.version }}
+          image-ref: ${{ env.REGISTRY }}/${{ steps.image-name.outputs.value }}:${{ needs.merge.outputs.version }}
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
