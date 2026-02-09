@@ -1572,7 +1572,7 @@ dependencies = [
 
 [[package]]
 name = "shitty-tunnel"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum 0.8.8",
@@ -1661,7 +1661,7 @@ dependencies = [
 
 [[package]]
 name = "st-domain"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -1670,7 +1670,7 @@ dependencies = [
 
 [[package]]
 name = "st-infra"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1685,7 +1685,7 @@ dependencies = [
 
 [[package]]
 name = "st-protocol"
-version = "0.0.1"
+version = "0.1.0"
 dependencies = [
  "prost",
  "st-domain",

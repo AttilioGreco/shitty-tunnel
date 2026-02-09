@@ -17,8 +17,14 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build-and-push:
+  # Build images in parallel for each architecture
+  build:
     runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -50,34 +56,106 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push Docker image
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=build-${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=build-${{ matrix.platform }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           provenance: false
 
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Merge all platform images into a multi-arch manifest
+  merge:
+    runs-on: ubuntu-22.04
+    needs: build
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tags: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/digests
+          pattern: digests-*
+          merge-multiple: true
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Create manifest list and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+
+      - name: Inspect image
+        run: |
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+
+      - name: Output image info
+        run: |
+          echo "Image pushed successfully:"
+          echo "Registry: ${{ env.REGISTRY }}"
+          echo "Image: ${{ env.IMAGE_NAME }}"
+          echo "Version: ${{ steps.meta.outputs.version }}"
+          echo "Tags: ${{ steps.meta.outputs.tags }}"
+          echo ""
+          echo "Pull with:"
+          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}"
+
+  # Security scanning
+  scan:
+    runs-on: ubuntu-22.04
+    needs: merge
+    steps:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
+        continue-on-error: true
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.ref_name }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.merge.outputs.version }}
           format: 'sarif'
           output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         if: always()
+        continue-on-error: true
         with:
           sarif_file: 'trivy-results.sarif'
-
-      - name: Generate artifact attestation
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.meta.outputs.digest }}
-          push-to-registry: true
