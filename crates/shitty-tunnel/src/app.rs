@@ -38,7 +38,12 @@ pub async fn run(state: Arc<AppState>) -> Result<()> {
     let public_app = crate::public_handler::router(state.clone());
 
     let tunnel_service = crate::tunnel_handler::TunnelGrpcService::new(state.clone());
+
+    // Configure HTTP/2 keepalive to prevent connection timeouts
+    // Clients send keepalive pings every 20s, server must respond
     let grpc_server = tonic::transport::Server::builder()
+        .http2_keepalive_interval(Some(std::time::Duration::from_secs(20)))
+        .http2_keepalive_timeout(Some(std::time::Duration::from_secs(60)))
         .add_service(ShittyTunnelServer::new(tunnel_service))
         .serve(tunnel_addr);
 
