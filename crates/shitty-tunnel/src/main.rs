@@ -59,6 +59,11 @@ async fn run_client(config_path: std::path::PathBuf) -> Result<()> {
 
     let config_str = std::fs::read_to_string(&config_path)
         .with_context(|| format!("failed to read config: {}", config_path.display()))?;
+
+    // Expand environment variables in config (e.g., ${VAR_NAME})
+    let config_str = st_infra::config::env::expand_env_vars(&config_str)
+        .context("failed to expand environment variables in config")?;
+
     let config: ClientConfig =
         toml::from_str(&config_str).context("failed to parse client config")?;
 

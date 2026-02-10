@@ -1,9 +1,9 @@
 [server]
-public_port = 8080          # porta HTTP pubblica (riceve traffico tunnelato da Traefik)
-tunnel_port = 8443          # porta gRPC per connessioni client
-private_key = "founMdhFUQM0bQuC9x0jDwgF1STNbYwbdD6CjnoBM5E="  # chiave privata del server
+public_port = 8080          # Public HTTP port (receives tunneled traffic from Traefik)
+tunnel_port = 8443          # gRPC port for client connections
+private_key = "founMdhFUQM0bQuC9x0jDwgF1STNbYwbdD6CjnoBM5E="  # Server private key
 
-# Lista client autorizzati
+# List of authorized clients
 [[peers]]
-public_key = "fQbK4MEYCbmAlqAdvVXaIIiCS3Uq8sNYb6TlxA1YF4s="  # chiave pubblica del client
-domain = "localhost"  # dominio per questo client
+public_key = "fQbK4MEYCbmAlqAdvVXaIIiCS3Uq8sNYb6TlxA1YF4s="  # Client public key
+domain = "localhost"  # Domain for this client

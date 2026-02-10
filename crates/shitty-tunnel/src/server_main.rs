@@ -18,6 +18,11 @@ use st_infra::peer::in_memory::InMemoryPeerRepository;
 pub async fn run_server(config_path: PathBuf) -> Result<()> {
     let config_str = std::fs::read_to_string(&config_path)
         .with_context(|| format!("failed to read config: {}", config_path.display()))?;
+
+    // Expand environment variables in config (e.g., ${VAR_NAME})
+    let config_str = st_infra::config::env::expand_env_vars(&config_str)
+        .context("failed to expand environment variables in config")?;
+
     let config: ServerConfig =
         toml::from_str(&config_str).context("failed to parse server config")?;
 

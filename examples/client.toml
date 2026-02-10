@@ -1,21 +1,25 @@
 [client]
-# Hostname o URL del server
-# Opzione 1: URL completo (raccomandato) - server_port opzionale
+# Server hostname or URL
+# Option 1: Full URL (recommended) - server_port optional
 #   server_host = "https://tunnel.example.com:443"
 #   server_host = "http://tunnel.example.com:8088"
-# Opzione 2: host separato + porta (auto-detect http/https)
+# Option 2: Separate host + port (auto-detect http/https)
 #   server_host = "tunnel.example.com"
-#   server_port = 443  # obbligatorio se server_host non è un URL completo
+#   server_port = 443  # required if server_host is not a full URL
 server_host = "tunnel.example.com"
 server_port = 8443
-private_key = "PATS7QnQD+LMGDez8EDi0YCvVx1zjWs1nSu3HjFZ3Fg="  # chiave privata del client
-server_public_key = "P1j5jRykDgudgNJNnrJVXHx85W3koAapuyCnCKcq8XM="  # chiave pubblica del server
+
+# You can use environment variables with the syntax ${VAR_NAME}
+# Example: private_key = "${CLIENT_PRIVATE_KEY}"
+#          server_public_key = "${SERVER_PUBLIC_KEY}"
+private_key = "PATS7QnQD+LMGDez8EDi0YCvVx1zjWs1nSu3HjFZ3Fg="  # Client private key
+server_public_key = "P1j5jRykDgudgNJNnrJVXHx85W3koAapuyCnCKcq8XM="  # Server public key
 
 [local]
 host = "127.0.0.1"
-port = 3000  # porta del tuo servizio locale
+port = 3000  # Port of your local service
 
 [reconnect]
 enabled = true
 initial_delay_ms = 1000
-max_delay_ms = 30000  # backoff esponenziale: 1s, 2s, 4s, 8s, 16s, 30s...
+max_delay_ms = 30000  # Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s...

@@ -1,19 +1,23 @@
 [server]
-public_port = 8080          # porta HTTP pubblica (riceve da nginx/ingress)
-tunnel_port = 8443          # porta gRPC per tunnel client
-private_key = "axjhCqieuY3cU6qpRA48FSjKlojaH5+Q5kjm5aLwdfc="  # chiave privata del server
+public_port = 8080          # Public HTTP port (receives from nginx/ingress)
+tunnel_port = 8443          # gRPC port for tunnel clients
 
-# Opzionale: TLS nativo sul tunnel_port (se non usi ingress)
+# You can use environment variables with the syntax ${VAR_NAME}
+# Example: private_key = "${SERVER_PRIVATE_KEY}"
+private_key = "axjhCqieuY3cU6qpRA48FSjKlojaH5+Q5kjm5aLwdfc="  # Server private key
+
+# Optional: Native TLS on tunnel_port (if not using ingress)
 # [server.tls]
 # enabled = false
 # cert_path = "/path/to/cert.pem"
 # key_path = "/path/to/key.pem"
 
-# Lista client autorizzati (uno per sviluppatore)
+# List of authorized clients (one per developer)
+# You can also use environment variables here
 [[peers]]
-public_key = "ZlsOtT/650gpT8XrPzNJOT4yyuJoYfngRnbRBBHknYE="
+public_key = "ZlsOtT/650gpT8XrPzNJOT4yyuJoYfngRnbRBBHknYE="  # or "${CLIENT_PUBLIC_KEY}"
 domain = "dev1.example.com"
 
 # [[peers]]
-# public_key = "altra_chiave_pubblica_client"
+# public_key = "another_client_public_key"
 # domain = "dev2.example.com"
