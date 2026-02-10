@@ -31,7 +31,7 @@ axum = "0.8"
 http-body-util = "0.1"
 reqwest = { version = "0.12", default-features = false, features = ["http2", "rustls-tls"] }
 
-tonic = "0.12"
+tonic = { version = "0.12", features = ["tls", "tls-webpki-roots"] }
 prost = "0.13"
 tonic-build = "0.12"
 tokio-stream = "0.1"

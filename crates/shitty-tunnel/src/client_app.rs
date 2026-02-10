@@ -85,7 +85,34 @@ impl ClientApp {
 
         tracing::info!("connecting to {endpoint}");
 
-        let mut client = ShittyTunnelClient::connect(endpoint.clone()).await?;
+        // Parse endpoint to extract hostname for SNI
+        let endpoint_url = endpoint.parse::<tonic::transport::Endpoint>()?;
+
+        // For HTTPS, configure TLS with proper SNI
+        let endpoint_url = if endpoint.starts_with("https://") {
+            let parsed = url::Url::parse(&endpoint)?;
+            let domain = parsed.host_str()
+                .ok_or_else(|| anyhow::anyhow!("missing host in endpoint"))?;
+
+            tracing::debug!("configuring TLS with domain: {}", domain);
+
+            endpoint_url
+                .tls_config(tonic::transport::ClientTlsConfig::new()
+                    .domain_name(domain))?
+        } else {
+            endpoint_url
+        };
+
+        // Configure HTTP/2 keepalive to prevent connection timeouts
+        let endpoint_url = endpoint_url
+            .http2_keep_alive_interval(Duration::from_secs(20))
+            .keep_alive_timeout(Duration::from_secs(60))
+            .keep_alive_while_idle(true);
+
+        tracing::debug!("HTTP/2 keepalive configured: interval=20s, timeout=60s");
+
+        let mut client = ShittyTunnelClient::connect(endpoint_url).await
+            .map_err(|e| anyhow::anyhow!("failed to connect to {}: {}", endpoint, e))?;
 
         tracing::info!("connected to {endpoint}");
 
