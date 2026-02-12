@@ -1,72 +1,78 @@
-# shittyTunnel - Esempio di configurazione
+# shittyTunnel - Configuration Examples
 
-Questa directory contiene configurazioni di esempio per provare shittyTunnel in locale.
+This directory contains example configurations to try shittyTunnel locally.
 
-## Setup rapido (test locale)
+## Quick Setup (local test)
 
-### 1. Genera le chiavi
+### 1. Generate keys
 
-```bash
-# Genera chiavi per il server
+# Generate keys for the server
+```
 shitty-tunnel keygen
-# Output:
-# Private key: axjhCqieuY3cU6qpRA48FSjKlojaH5+Q5kjm5aLwdfc=
-# Public key:  P1j5jRykDgudgNJNnrJVXHx85W3koAapuyCnCKcq8XM=
-
-# Genera chiavi per il client
-shitty-tunnel keygen
-# Output:
-# Private key: PATS7QnQD+LMGDez8EDi0YCvVx1zjWs1nSu3HjFZ3Fg=
-# Public key:  ZlsOtT/650gpT8XrPzNJOT4yyuJoYfngRnbRBBHknYE=
+```
+### Output:
+```
+Private key: axjhCqieuY3cU6qpRA48FSjKlojaH5+Q5kjm5aLwdfc=
+Public key:  P1j5jRykDgudgNJNnrJVXHx85W3koAapuyCnCKcq8XM=
 ```
 
-### 2. Configura il server
+### Generate keys for the client
+```
+shitty-tunnel keygen
+```
+Output:
+```
+Private key: PATS7QnQDLMGDez8EDi0YCvVx1zjWs1nSu3HjFZ3Fg=
+Public key:  ZlsOtT/650gpT8XrPzNJOT4yyuJoYfngRnbRBBHknYE=
+```
 
-Crea `/etc/shittyTunnel/server.toml` (o copia `examples/server.toml`):
+### 2. Configure the server
+
+Create `/etc/shittyTunnel/server.toml` (or copy `examples/server.toml`):
 
 ```toml
 [server]
 public_port = 8080
 tunnel_port = 8443
-private_key = "PRIVATE_KEY_DEL_SERVER"
+private_key = "SERVER_PRIVATE_KEY"
 
 [[peers]]
-public_key = "PUBLIC_KEY_DEL_CLIENT"
+public_key = "CLIENT_PUBLIC_KEY"
 domain = "dev1.example.com"
 ```
 
-**Importante:**
-- `server.private_key` = chiave privata generata per il server
-- `peers[].public_key` = chiave **pubblica** del client (scambio out-of-band)
+**Important:**
+- `server.private_key` = private key generated for the server
+- `peers[].public_key` = **public** key of the client (out-of-band exchange)
 
-### 3. Configura il client
+### 3. Configure the client
 
-Crea `~/.config/shittyTunnel.toml` (o copia `examples/client.toml`):
+Create `~/.config/shittyTunnel.toml` (or copy `examples/client.toml`):
 
 ```toml
 [client]
-server_host = "localhost"  # o IP/hostname del server
+server_host = "localhost"  # or server IP/hostname
 server_port = 8443
-private_key = "PRIVATE_KEY_DEL_CLIENT"
-server_public_key = "PUBLIC_KEY_DEL_SERVER"
+private_key = "CLIENT_PRIVATE_KEY"
+server_public_key = "SERVER_PUBLIC_KEY"
 
 [local]
 host = "127.0.0.1"
-port = 3000  # porta del tuo servizio locale
+port = 3000  # port of your local service
 ```
 
-**Importante:**
-- `client.private_key` = chiave privata generata per il client
-- `client.server_public_key` = chiave **pubblica** del server (scambio out-of-band)
+**Important:**
+- `client.private_key` = private key generated for the client
+- `client.server_public_key` = **public** key of the server (out-of-band exchange)
 
-### 4. Avvia un servizio locale (test)
+### 4. Start a local service (test)
 
 ```bash
-# Esempio con Python
+# Example with Python
 cd /tmp && python3 -m http.server 3000
 ```
 
-### 5. Avvia il server
+### 5. Start the server
 
 ```bash
 shitty-tunnel server --config /etc/shittyTunnel/server.toml
@@ -77,7 +83,7 @@ shitty-tunnel server --config /etc/shittyTunnel/server.toml
 # INFO gRPC tunnel listening on 0.0.0.0:8443
 ```
 
-### 6. Avvia il client
+### 6. Start the client
 
 ```bash
 shitty-tunnel client --config ~/.config/shittyTunnel.toml
@@ -88,230 +94,39 @@ shitty-tunnel client --config ~/.config/shittyTunnel.toml
 # INFO forwarding to 127.0.0.1:3000
 ```
 
-### 7. Testa il tunnel
+### 7. Test the tunnel
 
 ```bash
-# Richiesta HTTP al server sulla porta pubblica
+# HTTP request to server on public port
 curl -H "Host: dev1.example.com" http://localhost:8080/
 
-# Il server forwarda al client, che forwarda a localhost:3000
-# Dovresti vedere la risposta del tuo servizio locale
+# Server forwards to client, which forwards to localhost:3000
+# You should see the response from your local service
 ```
 
 ---
 
-## Setup produzione
+## Production Setup
 
-### Architettura
+### Architecture
 
-```
-Internet
-  │
-  ▼
-┌─────────────────────┐
-│  nginx/caddy/ingress │  ← TLS termination
-│  (*.example.com)     │
-└──────┬───────┬───────┘
-       │       │
-       │       │ :8443 (gRPC tunnel)
-       ▼       │
-  ┌─────────┐ │
-  │ shitty- │◄┘
-  │ tunnel  │
-  │ server  │
-  │  :8080  │ (HTTP pubblico)
-  └─────────┘
-       ▲
-       │ gRPC/HTTP2
-       │
-  ┌─────────┐
-  │ shitty- │
-  │ tunnel  │──► localhost:3000
-  │ client  │    (servizio locale)
-  └─────────┘
-  PC Sviluppatore
-```
+```mermaid
+flowchart TB
+    I[Internet]
+    subgraph SRV[Kubernetes Cluster]
+        N[Gateway API\nGateway listeners on :443\n*.example.com + tunnel.example.com]
+        S[shitty-tunnel server Pod/Service\nHTTP: 8080\ngRPC: 50051]
+    end
 
-### Configurazione nginx
+    subgraph DEV[Developer PC]
+        C[shitty-tunnel client]
+        L[Local application\n127.0.0.1:3000]
+    end
 
-```nginx
-# HTTP pubblico (riceve traffico da internet)
-upstream shitty_public {
-    server 127.0.0.1:8080;
-}
-
-# gRPC tunnel (client si connettono qui)
-upstream shitty_tunnel {
-    server 127.0.0.1:8443;
-}
-
-# Wildcard per tutti i domini sviluppatori
-server {
-    listen 443 ssl http2;
-    server_name *.example.com;
-
-    ssl_certificate /path/to/wildcard.pem;
-    ssl_certificate_key /path/to/wildcard-key.pem;
-
-    # Traffico HTTP pubblico → shitty-tunnel public port
-    location / {
-        proxy_pass http://shitty_public;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-
-# Endpoint tunnel per i client
-server {
-    listen 443 ssl http2;
-    server_name tunnel.example.com;
-
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
-
-    # gRPC tunnel endpoint
-    location / {
-        grpc_pass grpc://shitty_tunnel;
-        grpc_set_header Host $host;
-    }
-}
-```
-
-### Docker Compose (esempio)
-
-```yaml
-version: '3.8'
-
-services:
-  shitty-server:
-    image: shitty-tunnel:latest
-    command: ["server", "--config", "/config/server.toml"]
-    volumes:
-      - ./server.toml:/config/server.toml:ro
-    ports:
-      - "8080:8080"  # public HTTP (nginx upstream)
-      - "8443:8443"  # gRPC tunnel
-    restart: unless-stopped
-```
-
-### Aggiungere un nuovo sviluppatore
-
-1. Lo sviluppatore genera le sue chiavi:
-   ```bash
-   shitty-tunnel keygen
-   ```
-
-2. Lo sviluppatore invia la **chiave pubblica** all'admin
-
-3. Admin aggiunge il peer al `server.toml`:
-   ```toml
-   [[peers]]
-   public_key = "chiave_pubblica_dello_sviluppatore"
-   domain = "dev-nome.example.com"
-   ```
-
-4. Admin riavvia il server (o hot-reload se implementato)
-
-5. Admin invia allo sviluppatore:
-   - Chiave pubblica del server
-   - Hostname tunnel (`tunnel.example.com`)
-   - Dominio assegnato (`dev-nome.example.com`)
-
-6. Sviluppatore configura `~/.config/shittyTunnel.toml` e avvia il client
-
----
-
-## Troubleshooting
-
-### Client non si connette
-
-```
-ERROR tunnel error: connection refused
-```
-
-**Soluzione:** Verifica che il server sia in ascolto sulla `tunnel_port` e che sia raggiungibile.
-
-### Autenticazione fallita
-
-```
-ERROR tunnel error: Unauthenticated: auth failed
-```
-
-**Cause:**
-- Chiavi sbagliate (verifica `client.private_key` e `client.server_public_key`)
-- Client non autorizzato (la sua public key non è in `server.toml`)
-- Clock skew > 30s (sincronizza NTP su client e server)
-
-### 502 Bad Gateway
-
-```
-curl -H "Host: dev1.example.com" http://localhost:8080/
-502 Bad Gateway
-```
-
-**Cause:**
-- Client non connesso (verifica log client)
-- Servizio locale down (verifica `local.host:local.port`)
-- Dominio sbagliato nell'Host header
-
-### Tunnel si disconnette continuamente
-
-**Soluzione:**
-- Verifica log lato server per errori
-- Controlla firewall/ingress timeout (gRPC long-lived connection)
-- Se dietro nginx, aumenta `grpc_read_timeout` e `grpc_send_timeout`
-
----
-
-## Sicurezza
-
-- Le chiavi private **non devono mai** essere committate in git
-- Usa `.gitignore` per `*.toml` nelle directory con configurazioni reali
-- Considera secret manager per ambienti produzione (Vault, k8s secrets, etc.)
-- Il server deve validare che ogni dominio sia usato da un solo client contemporaneamente (già implementato)
-- Usa TLS/mTLS per il tunnel in produzione (nginx/ingress o tonic TLS)
-
----
-
-## Performance
-
-- Il tunnel gRPC/HTTP2 supporta multiplexing nativo (più richieste sullo stesso stream)
-- Backpressure automatico (flow control HTTP/2)
-- Timeout richiesta: 30s (modificabile in `public_handler.rs`)
-- Body limit: 10MB (modificabile nel codec protobuf)
-
-
-# systemd
-Per eseguire shitty-tunnel come servizio di sistema, crea i seguenti file di unità systemd.
-
-## Server
-
-`/etc/systemd/system/shitty-tunnel-server.service`
-
-```ini
-[Unit]
-Description=shitty-tunnel Server
-After=network.target
-[Service]
-ExecStart=/usr/local/bin/shitty-tunnel server --config /etc/shittyTunnel/server.toml
-Restart=on-failure
-[Install]
-WantedBy=multi-user.target
-```
-
-## Client
-
-`/etc/systemd/system/shitty-tunnel-client.service`
-
-```ini
-[Unit]
-Description=shitty-tunnel Client
-After=network.target
-[Service]
-ExecStart=/usr/local/bin/shitty-tunnel client --config /home/USERNAME/.config/shittyTunnel.toml
-Restart=on-failure
-[Install]
-WantedBy=multi-user.target
+    I --> N
+    N -->|HTTPRoute wildcard domain to Service 8080| S
+    C -->|gRPC HTTP2 tunnel to tunnel.example.com 443| N
+    N -->|GRPCRoute tunnel domain to Service 50051| S
+    S -->|requests forwarded through tunnel| C
+    C -->|local forwarding| L
 ```

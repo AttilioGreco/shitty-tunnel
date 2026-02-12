@@ -1,0 +1,98 @@
+---
+# Gateway API Configuration
+# Gateway API is the successor to Ingress and provides more advanced traffic routing
+# Requires Gateway API CRDs installed: kubectl apply -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.0.0/standard-install.yaml
+
+# Gateway resource - defines the infrastructure that handles traffic
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: shitty-tunnel-gateway
+  annotations:
+    # Optional: Enable automatic TLS certificate management
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  gatewayClassName: nginx  # or your gateway class (e.g., istio, envoy)
+  listeners:
+  # Listener for HTTP traffic (public proxy)
+  - name: http
+    protocol: HTTP
+    port: 80
+    hostname: "*.your-domain.com"
+    allowedRoutes:
+      namespaces:
+        from: Same
+  # Listener for HTTPS traffic (public proxy)
+  - name: https
+    protocol: HTTPS
+    port: 443
+    hostname: "*.your-domain.com"
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: shitty-tunnel-http-tls
+    allowedRoutes:
+      namespaces:
+        from: Same
+  # Listener for gRPC traffic (tunnel connections)
+  - name: grpc
+    protocol: HTTPS
+    port: 443
+    hostname: tunnel.your-domain.com
+    tls:
+      mode: Terminate
+      certificateRefs:
+      - name: shitty-tunnel-grpc-tls
+    allowedRoutes:
+      namespaces:
+        from: Same
+      kinds:
+      - kind: GRPCRoute
+
+---
+# HTTPRoute for public HTTP/HTTPS traffic
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: shitty-tunnel-http-route
+spec:
+  parentRefs:
+  - name: shitty-tunnel-gateway
+    sectionName: https
+  hostnames:
+  - "*.your-domain.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: shitty-tunnel-server
+      port: 8080
+
+---
+# GRPCRoute for tunnel gRPC traffic
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: shitty-tunnel-grpc-route
+spec:
+  parentRefs:
+  - name: shitty-tunnel-gateway
+    sectionName: grpc
+  hostnames:
+  - tunnel.your-domain.com
+  rules:
+  - matches:
+    - method:
+        type: Exact
+        service: tunnel.TunnelService
+    backendRefs:
+    - name: shitty-tunnel-server
+      port: 50051
+    # Enable session affinity for persistent gRPC connections
+    sessionPersistence:
+      sessionName: tunnel-session
+      type: Header
+      cookieConfig:
+        lifetimeType: Permanent

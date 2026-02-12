@@ -1,0 +1,130 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shitty-tunnel-server
+  labels:
+    app.kubernetes.io/name: shitty-tunnel-server
+    app.kubernetes.io/component: server
+    app.kubernetes.io/part-of: shitty-tunnel
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shitty-tunnel-server
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shitty-tunnel-server
+        app.kubernetes.io/component: server
+    spec:
+      containers:
+      - name: server
+        image: ghcr.io/attiliogreco/shitty-tunnel:latest
+        imagePullPolicy: Always
+        args:
+        - "server"
+        - "--config"
+        - "/etc/shittyTunnel/server.toml"
+
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        - name: grpc
+          containerPort: 50051
+          protocol: TCP
+
+        env:
+        - name: RUST_LOG
+          value: "info"
+        # Example: Load keys from Secret instead of ConfigMap
+        # - name: SERVER_PRIVATE_KEY
+        #   valueFrom:
+        #     secretKeyRef:
+        #       name: shitty-tunnel-secrets
+        #       key: server-private-key
+
+        volumeMounts:
+        - name: config
+          mountPath: /etc/shittyTunnel
+          readOnly: true
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+
+        livenessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          tcpSocket:
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 2
+
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+
+      volumes:
+      - name: config
+        configMap:
+          name: shitty-tunnel-server-config
+
+      securityContext:
+        fsGroup: 1000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: shitty-tunnel-server-config
+data:
+  server.toml: |
+    [server]
+    public_port = 8080
+    tunnel_port = 50051
+
+    # IMPORTANT: Replace with your server's private key
+    # Generate with: docker run --rm ghcr.io/attiliogreco/shitty-tunnel:latest keygen
+    private_key = "YOUR_SERVER_PRIVATE_KEY_HERE"
+
+    # For production: Use environment variable from Secret (more secure)
+    # Uncomment this line and set SERVER_PRIVATE_KEY as env var in deployment
+    # private_key = "SERVER_PRIVATE_KEY"
+
+    # Authorized peers (clients)
+    # Add one [[peers]] section for each client
+    [[peers]]
+    # IMPORTANT: Replace with your client's public key
+    public_key = "YOUR_CLIENT_PUBLIC_KEY_HERE"
+    # Domain this client can serve (must match your ingress configuration)
+    domain = "subdomain.your-domain.com"
+
+    # Example: Additional client
+    # [[peers]]
+    # public_key = "ANOTHER_CLIENT_PUBLIC_KEY_HERE"
+    # domain = "another-subdomain.your-domain.com"
