@@ -35,7 +35,8 @@ impl ClientApp {
                     break;
                 }
                 Err(e) => {
-                    tracing::warn!("tunnel error: {e}");
+                    tracing::warn!("tunnel error: {e:#}");
+                    tracing::debug!("tunnel error details: {e:?}");
                     if !reconnect.enabled {
                         return Err(e);
                     }
@@ -190,6 +191,12 @@ impl ClientApp {
             self.config.local.host, self.config.local.port
         );
 
+        if self.config.local.basic_auth.is_empty() {
+            tracing::warn!("basic_auth is NOT configured — requests will pass through without authentication");
+        } else {
+            tracing::info!("basic_auth is configured: \"{}\"", self.config.local.basic_auth);
+        }
+
         // --- Tunnel active ---
         let local_url = format!(
             "http://{}:{}",
@@ -197,6 +204,7 @@ impl ClientApp {
         );
 
         let http_client = reqwest::Client::builder().no_proxy().build()?;
+        let basic_auth = self.config.local.basic_auth.clone();
 
         // Read messages from server, spawn forwarding tasks
         while let Some(result) = in_stream.next().await {
@@ -206,9 +214,10 @@ impl ClientApp {
                     let tx = out_tx.clone();
                     let client = http_client.clone();
                     let url = local_url.clone();
+                    let auth = basic_auth.clone();
                     tokio::spawn(async move {
                         let domain_req = req.into();
-                        let resp = forwarder::forward(&client, &url, domain_req).await;
+                        let resp = forwarder::forward(&client, &url, domain_req, &auth).await;
                         let proto_resp: proto::HttpResponse = resp.into();
                         let _ = tx
                             .send(ClientMessage {

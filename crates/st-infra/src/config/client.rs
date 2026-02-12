@@ -20,6 +20,9 @@ pub struct ClientSettings {
 pub struct LocalSettings {
     pub host: String,
     pub port: u16,
+    /// Basic auth credentials in "user:password" format. Empty = no auth.
+    #[serde(default)]
+    pub basic_auth: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

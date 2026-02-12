@@ -1,10 +1,40 @@
+use base64::Engine;
 use st_domain::model::request::{ProxiedRequest, ProxiedResponse};
 
 pub async fn forward(
     client: &reqwest::Client,
     base_url: &str,
     req: ProxiedRequest,
+    basic_auth: &str,
 ) -> ProxiedResponse {
+    // Check basic auth if configured
+    if !basic_auth.is_empty() {
+        let authorized = req
+            .headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("authorization"))
+            .and_then(|(_, v)| v.strip_prefix("Basic "))
+            .and_then(|encoded| {
+                base64::engine::general_purpose::STANDARD
+                    .decode(encoded)
+                    .ok()
+            })
+            .and_then(|decoded| String::from_utf8(decoded).ok())
+            .is_some_and(|creds| creds == basic_auth);
+
+        if !authorized {
+            return ProxiedResponse {
+                request_id: req.request_id,
+                status: 401,
+                headers: vec![
+                    ("content-type".into(), "text/plain".into()),
+                    ("www-authenticate".into(), "Basic realm=\"shittyTunnel\"".into()),
+                ],
+                body: b"Unauthorized".to_vec(),
+            };
+        }
+    }
+
     let url = format!("{}{}", base_url, req.uri);
     let method = reqwest::Method::from_bytes(req.method.as_bytes()).unwrap_or(reqwest::Method::GET);
 
