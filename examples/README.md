@@ -108,25 +108,7 @@ curl -H "Host: dev1.example.com" http://localhost:8080/
 
 ## Production Setup
 
-### Architecture
+For production deployment options, see:
 
-```mermaid
-flowchart TB
-    I[Internet]
-    subgraph SRV[Kubernetes Cluster]
-        N[Gateway API\nGateway listeners on :443\n*.example.com + tunnel.example.com]
-        S[shitty-tunnel server Pod/Service\nHTTP: 8080\ngRPC: 50051]
-    end
-
-    subgraph DEV[Developer PC]
-        C[shitty-tunnel client]
-        L[Local application\n127.0.0.1:3000]
-    end
-
-    I --> N
-    N -->|HTTPRoute wildcard domain to Service 8080| S
-    C -->|gRPC HTTP2 tunnel to tunnel.example.com 443| N
-    N -->|GRPCRoute tunnel domain to Service 50051| S
-    S -->|requests forwarded through tunnel| C
-    C -->|local forwarding| L
-```
+- [Kubernetes deployment](kubernetes/) - Gateway API with HTTPRoute + GRPCRoute
+- [systemd setup](../README.md#running-with-systemd) - Server as system service, client as user service

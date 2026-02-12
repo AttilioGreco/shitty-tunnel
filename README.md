@@ -1,43 +1,135 @@
-# shittyTunnel 🚇
+# shittyTunnel
 
 [![Release](https://img.shields.io/github/v/release/agreco/shittyTunnel)](https://github.com/agreco/shittyTunnel/releases)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://github.com/agreco/shittyTunnel/pkgs/container/shittytunnel)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE)
 
-A self-hosted tunnel solution, for exposing your local services to the internet.
+A self-hosted tunnel for exposing local services to the internet.
 
 ## Features
 
-- **Ed25519 Authentication** - WireGuard-style mutual authentication with anti-replay protection
-- **gRPC Transport** - High-performance bidirectional streaming with protobuf, But works with a simple ingress without TCP configuration.
-- **Clean Architecture** - Domain-driven design with clear separation of concerns
-- **Docker Support** - Multi-arch images (amd64/arm64) available on ghcr.io
-- **Auto-Reconnect** - Client reconnects with exponential backoff
-- **Cross-Platform** - Binaries available for Linux, macOS, and Windows
+- **Ed25519 mutual authentication** with timestamp anti-replay (WireGuard-style)
+- **gRPC bidirectional streaming** - works behind any HTTP/2-capable ingress, no TCP passthrough needed
+- **Auto-reconnect** with exponential backoff
+- **Optional basic auth** on forwarded requests
+- **Docker** multi-arch images (amd64/arm64) on ghcr.io
+- **Cross-platform** binaries for Linux, macOS, and Windows
+
+## How it works
+
+```mermaid
+flowchart TB
+    I[Internet]
+    subgraph SRV[Server]
+        N[Reverse Proxy Ingress, Gateway API TLS termination on :443]
+        S[shitty-tunnel server\nHTTP :8080 — gRPC :50051]
+    end
+
+    subgraph DEV[Developer machine]
+        C[shitty-tunnel client]
+        L[Local application\n127.0.0.1:3000]
+    end
+
+    I --> N
+    N -->|HTTP traffic *.example.com| S
+    C -->|gRPC tunnel via tunnel.example.com:443| N
+    N -->|gRPC to :50051| S
+    S -->|proxied requests through tunnel| C
+    C -->|forwards to local service| L
+```
+
+The **server** exposes two ports: one for public HTTP traffic (proxied by your reverse proxy) and one for gRPC tunnel connections from clients. The **client** opens a persistent gRPC stream to the server, receives incoming HTTP requests through it, forwards them to a local service, and sends responses back.
 
 ## Disclaimer
-This project was born out of personal frustration.
 
-Tired of relying on paid services, I decided to experiment with a different approach: unleashing an AI agent to build a simple piece of software to solve my problem.
-As a result, this project was written almost entirely by an LLM, and for the most part without line-by-line human supervision.
+This project was born out of personal frustration with paid tunnel services. It was written almost entirely by an LLM, with human guidance on architecture and prompts. After several iterations, It seems to work. That said, you may find no a enterprise-grade, production-ready code here. Use at your own risk, and please contribute improvements if you can!
 
-After a few hours of work—alternating prompts, tests, and small adjustments—the program started working far better than I had expected. At that point, I decided to invest more time into it: refining prompts, making requests more precise, and refactoring the overall architecture. In my experience, guiding an LLM with a clear (even if initially a bit messy) structure helps mitigate many common context-related issues.
+## Quick start
 
-After further iterations and some manual refactoring of the CI and release process, I’m satisfied with the final result. That said, if you dig into the code, you may find a bit of everything: questionable choices, creative solutions, and inevitable compromises.
+### 1. Generate keys
 
-Don’t expect too much from this project. But if you have the time and curiosity to try it out, let me know what you think—you might be surprised.
-And if you’re a skilled Rust developer, pull requests and improvement suggestions are more than welcome.
-
-
-## Quick Start
-
-### Using Docker (Recommended)
+Each side (server and client) needs its own Ed25519 keypair. Generate them with:
 
 ```bash
-# Pull the latest image
+shitty-tunnel keygen   # run twice: once for server, once for client
+```
+
+Output:
+```
+Private key: axjhCqieuY3cU6qpRA48FSjKlojaH5+Q5kjm5aLwdfc=
+Public key:  P1j5jRykDgudgNJNnrJVXHx85W3koAapuyCnCKcq8XM=
+```
+
+Exchange **public** keys out-of-band. Private keys never leave their machine.
+
+### 2. Configure the server
+
+Create `/etc/shittyTunnel/server.toml`:
+
+```toml
+[server]
+public_port = 8080
+tunnel_port = 50051
+private_key = "SERVER_PRIVATE_KEY"
+
+# Environment variable expansion is supported:
+# private_key = "${SERVER_PRIVATE_KEY}"
+
+[[peers]]
+public_key = "CLIENT_PUBLIC_KEY"
+domain = "dev1.example.com"
+```
+
+### 3. Configure the client
+
+Create `~/.config/shittyTunnel.toml`:
+
+```toml
+[client]
+server_host = "https://tunnel.example.com"
+private_key = "CLIENT_PRIVATE_KEY"
+server_public_key = "SERVER_PUBLIC_KEY"
+
+[local]
+host = "127.0.0.1"
+port = 3000
+
+# Optional: protect the tunnel with basic auth
+# basic_auth = "user:password"
+
+[reconnect]
+enabled = true
+initial_delay_ms = 1000
+max_delay_ms = 30000
+```
+
+### 4. Run
+
+```bash
+# Server
+shitty-tunnel server --config /etc/shittyTunnel/server.toml
+
+# Client
+shitty-tunnel client --config ~/.config/shittyTunnel.toml
+```
+
+### 5. Test
+
+```bash
+curl -H "Host: dev1.example.com" http://localhost:8080/
+```
+
+## Installation
+
+### Pre-built binaries
+
+Download from [GitHub Releases](https://github.com/AttilioGreco/shitty-tunnel/releases).
+
+### Docker
+
+```bash
 docker pull ghcr.io/attiliogreco/shitty-tunnel:latest
 
-# Run server
 docker run -d \
   -p 8080:8080 -p 50051:50051 \
   -v ./server.toml:/etc/shittyTunnel/server.toml:ro \
@@ -45,49 +137,131 @@ docker run -d \
   server --config /etc/shittyTunnel/server.toml
 ```
 
-See [Docker documentation](.github/DOCKER.md) for more details.
+### Build from source
 
-### Using Pre-built Binaries
-
-Download the latest release for your platform from [GitHub Releases](https://github.com/agreco/shittyTunnel/releases).
-
-### Building from Source
+Requires Rust 1.85+ and protobuf compiler (`protoc`).
 
 ```bash
-# Clone the repository
 git clone https://github.com/agreco/shittyTunnel.git
 cd shittyTunnel
 
-# Build all binaries
+# Build and install (requires just: cargo install just)
+just install
+```
+
+Or manually:
+
+```bash
 cargo build --release
-
-# Binaries will be in target/release/
+sudo install -m 755 target/release/shitty-tunnel /usr/local/bin/shitty-tunnel
 ```
 
-## 📖 Documentation
+## Running with systemd
 
-- [Architecture & Specification](SPEC.md)
-- [Docker Usage](.github/DOCKER.md)
-- [Configuration Examples](examples/)
-- [Release Checklist](.github/RELEASE_CHECKLIST.md)
+### Server (system service)
 
-## Architecture
+Create `/etc/systemd/system/shitty-tunnel-server.service`:
 
+```ini
+[Unit]
+Description=shittyTunnel Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/shitty-tunnel server --config /etc/shittyTunnel/server.toml
+Restart=on-failure
+RestartSec=5
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/shittyTunnel
+
+[Install]
+WantedBy=multi-user.target
 ```
-st-domain     → Core business logic (entities, value objects)
-st-protocol   → gRPC/Protobuf definitions and conversions
-st-infra      → Infrastructure adapters (HTTP, gRPC, crypto)
-st-server     → Server binary
-st-client     → Client binary
-st-keygen     → Key generation utility
+
+Enable and start:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now shitty-tunnel-server
+sudo journalctl -u shitty-tunnel-server -f
 ```
+
+### Client (user service)
+
+The client runs as a regular user with `systemd --user`.
+
+Create `~/.config/systemd/user/shitty-tunnel-client.service`:
+
+```ini
+[Unit]
+Description=shittyTunnel Client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/shitty-tunnel client --config %h/.config/shittyTunnel.toml
+Restart=on-failure
+RestartSec=5
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=default.target
+```
+
+Enable and start:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now shitty-tunnel-client
+journalctl --user -u shitty-tunnel-client -f
+```
+
+To keep the user service running after logout:
+
+```bash
+loginctl enable-linger $USER
+```
+
+You can also use `just` shortcuts:
+
+```bash
+just install-systemd-server   # install server unit (requires sudo)
+just install-systemd-client   # install client user unit
+```
+
+## Task runner
+
+This project uses [just](https://github.com/casey/just) as a task runner. Run `just` to see all available tasks.
+
+| Command | Description |
+|---|---|
+| `just build` | Build debug binary |
+| `just release` | Build release binary |
+| `just test` | Run all workspace tests |
+| `just install` | Build release and install to `/usr/local/bin` |
+| `just install-systemd-server` | Install server systemd unit |
+| `just install-systemd-client` | Install client systemd user unit |
+| `just up` / `just down` | Start/stop Docker Compose dev environment |
+| `just logs` | Follow Docker Compose logs |
+| `just release-create VERSION` | Create a new release (tag + push) |
+
+## Further reading
+
+- [Configuration examples](examples/)
+- [Kubernetes deployment](examples/kubernetes/)
+- [Release scripts](scripts/)
 
 ## Security
 
-- **Ed25519 signatures** for authentication
-- **Timestamp-based anti-replay** (±30s window)
-- **Mutual authentication** between client and server
-- **Automated vulnerability scanning** with Trivy
+- **Ed25519 signatures** for mutual authentication
+- **Timestamp-based anti-replay** (30-second window)
+- **Trivy vulnerability scanning** in CI
 
 ## License
 
@@ -100,4 +274,4 @@ at your option.
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Feel free to submit a Pull Request.

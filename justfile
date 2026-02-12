@@ -1,4 +1,4 @@
-# shittyTunnel - Task Runner (just)
+# shittyTunnel - Task Runner
 # Install just: cargo install just
 # Usage: just <task>
 
@@ -8,6 +8,8 @@ set shell := ["bash", "-c"]
 @default:
     just --list
 
+# === Build ===
+
 # Build debug binary
 build:
     cargo build --bin shitty-tunnel
@@ -16,7 +18,7 @@ build:
 release:
     cargo build --release --bin shitty-tunnel
 
-# Run tests
+# Run all workspace tests
 test:
     cargo test --workspace
 
@@ -25,63 +27,143 @@ clean:
     cargo clean
     rm -rf build/ target/distrib/
 
-# Install to /usr/local/bin (requires sudo)
+# === Install ===
+
+# Build release and install to /usr/local/bin (requires sudo)
 install: release
     @echo "Installing shitty-tunnel to /usr/local/bin..."
     sudo install -m 755 target/release/shitty-tunnel /usr/local/bin/shitty-tunnel
-    @echo "* Installed: /usr/local/bin/shitty-tunnel"
+    @echo "Installed: /usr/local/bin/shitty-tunnel"
     shitty-tunnel --help
 
-# cargo-dist: Preview release plan
+# Install server systemd unit (system-wide, requires sudo)
+install-systemd-server:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Installing shitty-tunnel-server.service..."
+    sudo mkdir -p /etc/shittyTunnel
+    sudo tee /etc/systemd/system/shitty-tunnel-server.service > /dev/null <<'EOF'
+    [Unit]
+    Description=shittyTunnel Server
+    After=network-online.target
+    Wants=network-online.target
+
+    [Service]
+    Type=simple
+    ExecStart=/usr/local/bin/shitty-tunnel server --config %h/.config/shittyTunnel.toml
+    Restart=on-failure
+    RestartSec=5
+    NoNewPrivileges=true
+    ProtectSystem=strict
+    ProtectHome=read-only
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+    sudo systemctl daemon-reload
+    echo ""
+    echo "Installed: /etc/systemd/system/shitty-tunnel-server.service"
+    echo ""
+    echo "Next steps:"
+    echo "  1. Edit ~/.config/shittyTunnel.toml (see examples/server.toml)"
+    echo "  2. sudo systemctl enable --now shitty-tunnel-server"
+    echo "  3. sudo journalctl -u shitty-tunnel-server -f"
+
+# Install client systemd user unit (per-user, no sudo)
+install-systemd-client:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p ~/.config/systemd/user
+    cat > ~/.config/systemd/user/shitty-tunnel-client.service <<'EOF'
+    [Unit]
+    Description=shittyTunnel Client
+    After=network-online.target
+    Wants=network-online.target
+
+    [Service]
+    Type=simple
+    ExecStart=/usr/local/bin/shitty-tunnel client --config %h/.config/shittyTunnel.toml
+    Restart=on-failure
+    RestartSec=5
+    Environment=RUST_LOG=info
+
+    [Install]
+    WantedBy=default.target
+    EOF
+    systemctl --user daemon-reload
+    echo ""
+    echo "Installed: ~/.config/systemd/user/shitty-tunnel-client.service"
+    echo ""
+    echo "Next steps:"
+    echo "  1. Edit ~/.config/shittyTunnel.toml (see examples/client.toml)"
+    echo "  2. systemctl --user enable --now shitty-tunnel-client"
+    echo "  3. journalctl --user -u shitty-tunnel-client -f"
+    echo "  4. loginctl enable-linger $USER  (to keep running after logout)"
+
+# Uninstall server systemd unit
+uninstall-systemd-server:
+    @echo "Stopping and removing shitty-tunnel-server.service..."
+    -@sudo systemctl stop shitty-tunnel-server
+    -@sudo systemctl disable shitty-tunnel-server
+    @sudo rm -f /etc/systemd/system/shitty-tunnel-server.service
+    @sudo systemctl daemon-reload
+    @echo "Removed."
+
+# Uninstall client systemd user unit
+uninstall-systemd-client:
+    @echo "Stopping and removing shitty-tunnel-client.service..."
+    -@systemctl --user stop shitty-tunnel-client
+    -@systemctl --user disable shitty-tunnel-client
+    @rm -f ~/.config/systemd/user/shitty-tunnel-client.service
+    @systemctl --user daemon-reload
+    @echo "Removed."
+
+# === cargo-dist ===
+
+# Preview release plan
 dist-plan:
     @echo "=== cargo-dist release plan ==="
     cargo dist plan
 
-# cargo-dist: Build multi-platform release
+# Build multi-platform release
 dist-build:
     @echo "=== Building multi-platform release with cargo-dist ==="
     cargo dist build --artifacts all
     @echo ""
-    @echo "* Artifacts in: target/distrib/"
+    @echo "Artifacts in: target/distrib/"
     @ls -lh target/distrib/ 2>/dev/null | grep -E '\.(tar\.|zip|installer)' || echo "No artifacts found"
+
+# === Docker ===
 
 # Build Docker image
 docker VERSION="latest":
     docker build -t shitty-tunnel:{{VERSION}} .
     docker tag shitty-tunnel:{{VERSION}} shitty-tunnel:latest
 
-# === Docker ===
-
-# Start all services (with hot-reload)
+# Start dev environment (Docker Compose)
 up:
-    @echo "Starting shittyTunnel..."
+    @echo "Starting shittyTunnel dev environment..."
     docker compose up --build -d
     @echo ""
-    @echo "* Environment started!"
-    @echo "  - Traefik HTTP:     http://localhost:5000"
-    @echo "  - Traefik Dashboard: http://localhost:8081/dashboard/"
-    @echo "  - Server HTTP:      http://localhost:8080"
-    @echo "  - Server gRPC:      http://localhost:8443"
+    @echo "Environment started:"
+    @echo "  Traefik HTTP:      http://localhost:5000"
+    @echo "  Traefik Dashboard: http://localhost:8081/dashboard/"
+    @echo "  Server HTTP:       http://localhost:8080"
+    @echo "  Server gRPC:       http://localhost:8443"
     @echo ""
     @echo "Test: curl -H \"Host: test.localhost\" http://localhost:5000"
     @echo "Logs: just logs"
     @echo "Stop: just down"
-    @echo ""
-    @echo "Hot-reload is ACTIVE - edit any .rs file and save!"
 
-# Stop all services
+# Stop dev environment
 down:
-    @echo "Stopping all services..."
     docker compose down
 
-# Restart all services
+# Restart dev environment
 restart:
-    @echo "Restarting all services..."
     docker compose restart
 
-# === Docker Logs ===
-
-# Show all logs
+# Show all logs (Docker Compose)
 logs:
     docker compose logs -f
 
@@ -93,23 +175,17 @@ logs-server:
 logs-client:
     docker compose logs -f client
 
-# === Docker Cleanup ===
-
 # Stop and remove volumes
 clean-docker:
-    @echo "Stopping containers and removing volumes..."
     docker compose down -v
-    @echo "Cleanup complete"
 
-# Stop, remove volumes AND images
+# Stop, remove volumes and images
 clean-docker-all:
-    @echo "Stopping containers, removing volumes AND images..."
     docker compose down -v --rmi all
-    @echo "Full cleanup complete"
 
 # === Quick Test ===
 
-# Test the tunnel end-to-end
+# Test the tunnel end-to-end (requires dev environment running)
 test-tunnel:
     @echo "Testing tunnel..."
     @sleep 2
@@ -117,31 +193,28 @@ test-tunnel:
     @echo ""
     @echo "Tunnel is working!"
 
-# === Release Management ===
+# === Release ===
 
-# Create a new release (updates version, changelog, tags, and pushes)
+# Create a new release (version, changelog, tag, push)
 release-create VERSION:
-    @echo "Creating release {{VERSION}}..."
     ./scripts/release.sh {{VERSION}}
 
 # Create release without running tests
 release-create-skip-tests VERSION:
-    @echo "Creating release {{VERSION}} (skipping tests)..."
     ./scripts/release.sh {{VERSION}} --skip-tests
 
 # Prepare release locally without pushing
 release-prepare VERSION:
-    @echo "Preparing release {{VERSION}} (no push)..."
     ./scripts/release.sh {{VERSION}} --no-push
 
-# Check what would be released
+# Show current version and unreleased changes
 release-check:
     @echo "Current version: $(grep '^version =' Cargo.toml | head -1 | cut -d'"' -f2)"
     @echo ""
     @echo "Unreleased changes:"
     @sed -n '/^## \[Unreleased\]/,/^## \[/p' CHANGELOG.md | head -n -1
 
-# Undo last release (before push only!)
+# Undo last release (local only, before push!)
 release-undo:
     @echo "Undoing last release..."
     @LAST_TAG=$$(git describe --tags --abbrev=0 2>/dev/null || echo "no-tag"); \
@@ -153,4 +226,4 @@ release-undo:
     git tag -d "$$LAST_TAG"; \
     echo "Resetting last commit"; \
     git reset --hard HEAD~1; \
-    echo "* Release undone (local only)"
+    echo "Release undone (local only)"
