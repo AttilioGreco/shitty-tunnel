@@ -12,6 +12,7 @@ A self-hosted tunnel for exposing local services to the internet.
 - **gRPC bidirectional streaming** - works behind any HTTP/2-capable ingress, no TCP passthrough needed
 - **Auto-reconnect** with exponential backoff
 - **Optional basic auth** on forwarded requests
+- **Header manipulation** — inject or strip headers on proxied requests and responses
 - **Docker** multi-arch images (amd64/arm64) on ghcr.io
 - **Cross-platform** binaries for Linux, macOS, and Windows
 
@@ -96,6 +97,14 @@ port = 3000
 
 # Optional: protect the tunnel with basic auth
 # basic_auth = "user:password"
+
+# Optional: inject headers on every proxied request and response
+# [local.add_headers]
+# "X-Forwarded-By" = "shittyTunnel"
+
+# Optional: strip headers from every proxied request and response
+# [local.remove_headers]
+# names = ["Authorization", "Cookie"]
 
 [reconnect]
 enabled = true
@@ -251,6 +260,39 @@ This project uses [just](https://github.com/casey/just) as a task runner. Run `j
 | `just logs` | Follow Docker Compose logs |
 | `just release-create VERSION` | Create a new release (tag + push) |
 
+## Header manipulation
+
+The client can inject or strip HTTP headers on every proxied request (sent to the local service) and on every response (returned to the original caller). Rules are applied in this order:
+
+1. Headers listed in `remove_headers` are stripped
+2. Headers listed in `add_headers` are injected — overwriting any existing header with the same name
+
+Both sections are optional. If omitted, headers are forwarded as-is (hop-by-hop headers are always stripped regardless).
+
+```toml
+[local]
+host = "127.0.0.1"
+port = 3000
+
+# Inject (or overwrite) these headers on every request and response
+[local.add_headers]
+"X-Forwarded-By" = "shittyTunnel"
+"X-Environment"  = "production"
+
+# Strip these headers from every request and response (case-insensitive)
+[local.remove_headers]
+names = ["Authorization", "Cookie", "X-Internal-Secret"]
+```
+
+**Use cases:**
+
+| Goal | Config |
+|---|---|
+| Tag requests with a custom header | `[local.add_headers]` |
+| Prevent credentials from reaching the local service | `[local.remove_headers]` |
+| Override a response header before it reaches the caller | `[local.add_headers]` |
+| Strip sensitive response headers (e.g. `Server`, `X-Powered-By`) | `[local.remove_headers]` |
+
 ## Further reading
 
 - [Configuration examples](examples/)
@@ -275,3 +317,5 @@ at your option.
 ## Contributing
 
 Contributions are welcome! Feel free to submit a Pull Request.
+
+

@@ -1,9 +1,12 @@
 use st_domain::model::request::{ProxiedRequest, ProxiedResponse};
+use st_infra::config::client::{AddHeaders, RemoveHeaders};
 
 pub async fn forward(
     client: &reqwest::Client,
     base_url: &str,
     req: ProxiedRequest,
+    add_headers: Option<&AddHeaders>,
+    remove_headers: Option<&RemoveHeaders>,
 ) -> ProxiedResponse {
     let url = format!("{}{}", base_url, req.uri);
     let method = reqwest::Method::from_bytes(req.method.as_bytes()).unwrap_or(reqwest::Method::GET);
@@ -11,6 +14,10 @@ pub async fn forward(
     let start = std::time::Instant::now();
 
     let mut builder = client.request(method.clone(), &url);
+
+    let remove_set: Vec<String> = remove_headers
+        .map(|r| r.names.iter().map(|n| n.to_lowercase()).collect())
+        .unwrap_or_default();
 
     for (key, value) in &req.headers {
         let lower = key.to_lowercase();
@@ -22,7 +29,17 @@ pub async fn forward(
         {
             continue;
         }
+        if remove_set.contains(&lower) {
+            continue;
+        }
         builder = builder.header(key.as_str(), value.as_str());
+    }
+
+    // Inject/overwrite configured headers
+    if let Some(add) = add_headers {
+        for (key, value) in &add.0 {
+            builder = builder.header(key.as_str(), value.as_str());
+        }
     }
 
     if !req.body.is_empty() {
@@ -32,11 +49,22 @@ pub async fn forward(
     match builder.send().await {
         Ok(resp) => {
             let status = resp.status().as_u16();
-            let headers: Vec<(String, String)> = resp
+            let mut headers: Vec<(String, String)> = resp
                 .headers()
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+                .filter(|(k, _)| !remove_set.contains(&k.to_lowercase()))
                 .collect();
+
+            // Inject/overwrite configured headers into response
+            if let Some(add) = add_headers {
+                for (key, value) in &add.0 {
+                    let lower = key.to_lowercase();
+                    headers.retain(|(k, _)| k.to_lowercase() != lower);
+                    headers.push((key.clone(), value.clone()));
+                }
+            }
+
             let body = resp.bytes().await.unwrap_or_default().to_vec();
 
             let elapsed = start.elapsed();

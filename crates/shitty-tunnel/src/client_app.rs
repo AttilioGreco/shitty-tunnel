@@ -197,6 +197,17 @@ impl ClientApp {
             tracing::info!("basic_auth is configured: \"{}\"", self.config.local.basic_auth);
         }
 
+        if let Some(add) = &self.config.local.add_headers {
+            for (k, v) in &add.0 {
+                tracing::info!("header inject: {k} = {v}");
+            }
+        }
+        if let Some(remove) = &self.config.local.remove_headers {
+            for name in &remove.names {
+                tracing::info!("header strip:  {name}");
+            }
+        }
+
         // --- Tunnel active ---
         let local_url = format!(
             "http://{}:{}",
@@ -215,9 +226,19 @@ impl ClientApp {
                     let client = http_client.clone();
                     let url = local_url.clone();
                     let auth = basic_auth.clone();
+                    let add_headers = self.config.local.add_headers.as_ref().cloned();
+                    let remove_headers = self.config.local.remove_headers.as_ref().cloned();
                     tokio::spawn(async move {
                         let domain_req = req.into();
-                        let resp = forwarder::forward(&client, &url, domain_req, &auth).await;
+                        let resp = forwarder::forward(
+                            &client,
+                            &url,
+                            domain_req,
+                            &auth,
+                            add_headers.as_ref(),
+                            remove_headers.as_ref(),
+                        )
+                        .await;
                         let proto_resp: proto::HttpResponse = resp.into();
                         let _ = tx
                             .send(ClientMessage {
