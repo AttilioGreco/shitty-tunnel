@@ -65,7 +65,7 @@ fi
 # Helper to revert file changes on failure
 revert_files() {
     warn "Reverting file changes..."
-    git checkout Cargo.toml CHANGELOG.md 2>/dev/null || true
+    git checkout Cargo.toml Cargo.lock CHANGELOG.md 2>/dev/null || true
 }
 
 # 1. Update Cargo.toml version
@@ -122,7 +122,7 @@ echo
 # 4. Show changes
 echo
 info "Changes to be committed:"
-git diff --color=always Cargo.toml CHANGELOG.md | head -50
+git diff --color=always Cargo.toml Cargo.lock CHANGELOG.md | head -50
 echo
 
 # 5. Confirm before committing
@@ -130,13 +130,13 @@ read -p "$(echo -e ${GREEN}Commit these changes?${NC} [Y/n] )" -n 1 -r
 echo
 if [[ $REPLY =~ ^[Nn]$ ]]; then
     warn "Restoring original files..."
-    git checkout Cargo.toml CHANGELOG.md
+    git checkout Cargo.toml Cargo.lock CHANGELOG.md
     error "Release cancelled"
 fi
 
 # 6. Commit changes
 info "Creating commit..."
-git add Cargo.toml CHANGELOG.md
+git add Cargo.toml Cargo.lock CHANGELOG.md
 if git commit -m "chore: bump version to ${TAG}"; then
     success "Commit created"
 else
