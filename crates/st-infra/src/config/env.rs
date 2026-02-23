@@ -11,7 +11,8 @@ static ENV_VAR_PATTERN: LazyLock<Regex> =
 ///
 /// # Examples
 /// ```
-/// std::env::set_var("MY_SECRET", "secret123");
+/// use st_infra::config::env::expand_env_vars;
+/// unsafe { std::env::set_var("MY_SECRET", "secret123") };
 /// let result = expand_env_vars("key = \"${MY_SECRET}\"").unwrap();
 /// assert_eq!(result, "key = \"secret123\"");
 /// ```
