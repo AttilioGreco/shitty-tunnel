@@ -140,21 +140,21 @@ else
     error "Failed to create commit"
 fi
 
-# 7. Create git tag
-info "Creating tag ${TAG}..."
-if git tag -a "$TAG" -m "Release ${TAG}"; then
-    success "Tag created: ${TAG}"
-else
-    error "Failed to create tag"
-fi
-
-# 8. Build check (optional)
+# 7. Build check (optional) — before tagging so a failure leaves no tag behind
 echo
 info "Testing Docker build..."
 if docker build -t "shittytunnel:${VERSION}" . > /dev/null 2>&1; then
     success "Docker build successful"
 else
     warn "Docker build failed (this won't prevent the release)"
+fi
+
+# 8. Create git tag — last git operation before push
+info "Creating tag ${TAG}..."
+if git tag -a "$TAG" -m "Release ${TAG}"; then
+    success "Tag created: ${TAG}"
+else
+    error "Failed to create tag"
 fi
 
 # 9. Push to remote
