@@ -62,27 +62,18 @@ if [ "$CURRENT_BRANCH" != "main" ]; then
     fi
 fi
 
-# 1. Run tests (unless skipped)
-if [ "$SKIP_TESTS" = false ]; then
-    info "Running tests..."
-    if cargo test --workspace --quiet; then
-        success "All tests passed"
-    else
-        error "Tests failed. Fix them or use --skip-tests to skip."
-    fi
-else
-    warn "Skipping tests (--skip-tests flag)"
-fi
-echo
+# Helper to revert file changes on failure
+revert_files() {
+    warn "Reverting file changes..."
+    git checkout Cargo.toml CHANGELOG.md 2>/dev/null || true
+}
 
-# 2. Update Cargo.toml version
+# 1. Update Cargo.toml version
 info "Updating Cargo.toml version to ${VERSION}..."
 CARGO_FILE="Cargo.toml"
 
-# Backup original file
 cp "$CARGO_FILE" "${CARGO_FILE}.bak"
 
-# Update version in [workspace.package]
 if sed -i.tmp "s/^version = \".*\"$/version = \"${VERSION}\"/" "$CARGO_FILE" && \
    grep -q "version = \"${VERSION}\"" "$CARGO_FILE"; then
     rm -f "${CARGO_FILE}.tmp" "${CARGO_FILE}.bak"
@@ -92,15 +83,13 @@ else
     error "Failed to update Cargo.toml"
 fi
 
-# 3. Update CHANGELOG.md
+# 2. Update CHANGELOG.md
 info "Updating CHANGELOG.md..."
 CHANGELOG="CHANGELOG.md"
 TODAY=$(date +%Y-%m-%d)
 
-# Backup original file
 cp "$CHANGELOG" "${CHANGELOG}.bak"
 
-# Replace [Unreleased] with [version] - date and create new [Unreleased] section
 if awk -v ver="$VERSION" -v date="$TODAY" '
     /^## \[Unreleased\]/ {
         print "## [Unreleased]\n"
@@ -115,6 +104,20 @@ else
     mv "${CHANGELOG}.bak" "$CHANGELOG"
     error "Failed to update CHANGELOG.md"
 fi
+
+# 3. Run tests (with updated Cargo.toml so the tested artifact matches the release)
+if [ "$SKIP_TESTS" = false ]; then
+    info "Running tests..."
+    if cargo test --workspace --quiet; then
+        success "All tests passed"
+    else
+        revert_files
+        error "Tests failed. Fix them or use --skip-tests to skip."
+    fi
+else
+    warn "Skipping tests (--skip-tests flag)"
+fi
+echo
 
 # 4. Show changes
 echo
