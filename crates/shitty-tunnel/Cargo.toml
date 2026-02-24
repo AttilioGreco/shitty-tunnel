@@ -31,6 +31,8 @@ clap = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+rust-embed = { workspace = true }
+mime_guess = { workspace = true }
 toml = { workspace = true }
 url = { workspace = true }
 

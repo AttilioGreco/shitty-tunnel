@@ -2,17 +2,47 @@ use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{State, WebSocketUpgrade};
-use axum::response::IntoResponse;
+use axum::http::{header, StatusCode, Uri};
+use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
+use rust_embed::Embed;
 
 use super::buffer::{EventBuffer, WsMessage};
+
+#[derive(Embed)]
+#[folder = "../../frontend/dist"]
+struct FrontendAssets;
 
 pub fn router(buffer: Arc<EventBuffer>) -> Router {
     Router::new()
         .route("/api/ws", get(ws_handler))
         .route("/api/events", get(events_handler))
         .with_state(buffer)
+        .fallback(static_handler)
+}
+
+async fn static_handler(uri: Uri) -> Response {
+    let path = uri.path().trim_start_matches('/');
+
+    // Try the exact path first
+    if !path.is_empty() {
+        if let Some(file) = FrontendAssets::get(path) {
+            let mime = mime_guess::from_path(path).first_or_octet_stream();
+            return (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, mime.as_ref())],
+                file.data,
+            )
+                .into_response();
+        }
+    }
+
+    // SPA fallback: serve index.html for all other routes
+    match FrontendAssets::get("index.html") {
+        Some(file) => Html(file.data).into_response(),
+        None => (StatusCode::NOT_FOUND, "frontend not built").into_response(),
+    }
 }
 
 async fn ws_handler(
