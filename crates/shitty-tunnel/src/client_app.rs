@@ -14,11 +14,13 @@ use st_protocol::proto::{
 };
 
 use crate::client_forwarder as forwarder;
+use crate::dashboard::buffer::EventBuffer;
 
 pub struct ClientApp {
     pub config: ClientConfig,
     pub key_pair: KeyPair,
     pub server_public_key: [u8; 32],
+    pub event_buffer: Option<std::sync::Arc<EventBuffer>>,
 }
 
 impl ClientApp {
@@ -228,8 +230,25 @@ impl ClientApp {
                     let auth = basic_auth.clone();
                     let add_headers = self.config.local.add_headers.as_ref().cloned();
                     let remove_headers = self.config.local.remove_headers.as_ref().cloned();
+                    let buffer = self.event_buffer.clone();
                     tokio::spawn(async move {
-                        let domain_req = req.into();
+                        let domain_req: st_domain::model::request::ProxiedRequest = req.into();
+
+                        let event_id = if let Some(buf) = &buffer {
+                            Some(
+                                buf.record_request_started(
+                                    &domain_req.method,
+                                    &domain_req.uri,
+                                    &domain_req.headers,
+                                    &domain_req.body,
+                                )
+                                .await,
+                            )
+                        } else {
+                            None
+                        };
+
+                        let start = std::time::Instant::now();
                         let resp = forwarder::forward(
                             &client,
                             &url,
@@ -239,6 +258,19 @@ impl ClientApp {
                             remove_headers.as_ref(),
                         )
                         .await;
+                        let duration_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+                        if let (Some(id), Some(buf)) = (event_id, &buffer) {
+                            buf.record_request_completed(
+                                id,
+                                resp.status,
+                                &resp.headers,
+                                &resp.body,
+                                duration_ms,
+                            )
+                            .await;
+                        }
+
                         let proto_resp: proto::HttpResponse = resp.into();
                         let _ = tx
                             .send(ClientMessage {

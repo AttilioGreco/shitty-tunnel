@@ -7,6 +7,7 @@ pub struct ClientConfig {
     pub client: ClientSettings,
     pub local: LocalSettings,
     pub reconnect: Option<ReconnectSettings>,
+    pub dashboard: Option<DashboardSettings>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -56,6 +57,36 @@ impl Default for ReconnectSettings {
             enabled: true,
             initial_delay_ms: 1000,
             max_delay_ms: 30000,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DashboardSettings {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_dashboard_port")]
+    pub port: u16,
+    #[serde(default = "default_max_events")]
+    pub max_events: usize,
+}
+
+fn default_true() -> bool {
+    true
+}
+fn default_dashboard_port() -> u16 {
+    3001
+}
+fn default_max_events() -> usize {
+    500
+}
+
+impl Default for DashboardSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            port: 3001,
+            max_events: 500,
         }
     }
 }

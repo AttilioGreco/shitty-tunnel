@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 mod server_main;
 mod client_app;
 mod client_forwarder;
+mod dashboard;
 
 // Server modules
 mod app;
@@ -79,13 +80,34 @@ async fn run_client(config_path: std::path::PathBuf) -> Result<()> {
         .try_into()
         .map_err(|_| anyhow::anyhow!("server public key must be 32 bytes"))?;
 
+    let dashboard_settings = config
+        .dashboard
+        .clone()
+        .unwrap_or_default();
+
+    let event_buffer = if dashboard_settings.enabled {
+        Some(Arc::new(dashboard::buffer::EventBuffer::new(
+            dashboard_settings.max_events,
+        )))
+    } else {
+        None
+    };
+
     let client_app = Arc::new(client_app::ClientApp {
         config,
         key_pair,
         server_public_key,
+        event_buffer: event_buffer.clone(),
     });
 
-    client_app.run().await
+    if let Some(buffer) = event_buffer {
+        tokio::select! {
+            r = client_app.run() => r,
+            r = dashboard::server::run(buffer, dashboard_settings.port) => r,
+        }
+    } else {
+        client_app.run().await
+    }
 }
 
 fn run_keygen() {

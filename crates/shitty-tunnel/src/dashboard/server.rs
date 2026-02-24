@@ -1,0 +1,101 @@
+use std::sync::Arc;
+
+use axum::extract::ws::{Message, WebSocket};
+use axum::extract::{State, WebSocketUpgrade};
+use axum::response::IntoResponse;
+use axum::routing::get;
+use axum::Router;
+
+use super::buffer::{EventBuffer, WsMessage};
+
+pub fn router(buffer: Arc<EventBuffer>) -> Router {
+    Router::new()
+        .route("/api/ws", get(ws_handler))
+        .route("/api/events", get(events_handler))
+        .with_state(buffer)
+}
+
+async fn ws_handler(
+    ws: WebSocketUpgrade,
+    State(buffer): State<Arc<EventBuffer>>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_ws(socket, buffer))
+}
+
+async fn handle_ws(mut socket: WebSocket, buffer: Arc<EventBuffer>) {
+    // Send initial snapshot
+    let (events, epoch_ms) = buffer.snapshot().await;
+    let snapshot = WsMessage::Snapshot { events, epoch_ms };
+    if let Ok(json) = serde_json::to_string(&snapshot) {
+        if socket.send(Message::Text(json.into())).await.is_err() {
+            return;
+        }
+    }
+
+    let mut rx = buffer.subscribe();
+
+    loop {
+        tokio::select! {
+            msg = rx.recv() => {
+                match msg {
+                    Ok(ws_msg) => {
+                        if let Ok(json) = serde_json::to_string(&ws_msg) {
+                            if socket.send(Message::Text(json.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        // Client fell behind — send fresh snapshot
+                        let (events, epoch_ms) = buffer.snapshot().await;
+                        let snapshot = WsMessage::Snapshot { events, epoch_ms };
+                        if let Ok(json) = serde_json::to_string(&snapshot) {
+                            if socket.send(Message::Text(json.into())).await.is_err() {
+                                break;
+                            }
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+            }
+            incoming = socket.recv() => {
+                match incoming {
+                    Some(Ok(Message::Text(text))) => {
+                        if let Ok(cmd) = serde_json::from_str::<ClientCommand>(&text) {
+                            match cmd {
+                                ClientCommand::Clear => buffer.clear().await,
+                            }
+                        }
+                    }
+                    Some(Ok(Message::Close(_))) | None => break,
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+async fn events_handler(State(buffer): State<Arc<EventBuffer>>) -> impl IntoResponse {
+    let (events, epoch_ms) = buffer.snapshot().await;
+    let snapshot = WsMessage::Snapshot { events, epoch_ms };
+    axum::Json(snapshot)
+}
+
+use tokio::sync::broadcast;
+
+#[derive(serde::Deserialize)]
+#[serde(tag = "type")]
+enum ClientCommand {
+    #[serde(rename = "clear")]
+    Clear,
+}
+
+pub async fn run(buffer: Arc<EventBuffer>, port: u16) -> anyhow::Result<()> {
+    let app = router(buffer);
+    let addr = format!("0.0.0.0:{port}");
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    tracing::info!("dashboard listening on {addr}");
+    axum::serve(listener, app)
+        .await
+        .map_err(|e| anyhow::anyhow!("dashboard server error: {e}"))
+}
