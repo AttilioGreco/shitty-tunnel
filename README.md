@@ -9,10 +9,11 @@ A self-hosted tunnel for exposing local services to the internet.
 ## Features
 
 - **Ed25519 mutual authentication** with timestamp anti-replay (WireGuard-style)
-- **gRPC bidirectional streaming** - works behind any HTTP/2-capable ingress, no TCP passthrough needed
+- **gRPC bidirectional streaming** — works behind any HTTP/2-capable ingress, no TCP passthrough needed
 - **Auto-reconnect** with exponential backoff
 - **Optional basic auth** on forwarded requests
 - **Header manipulation** — inject or strip headers on proxied requests and responses
+- **Inspector dashboard** — live request viewer embedded in the client binary, no extra install
 - **Docker** multi-arch images (amd64/arm64) on ghcr.io
 - **Cross-platform** binaries for Linux, macOS, and Windows
 
@@ -127,6 +128,23 @@ shitty-tunnel client --config ~/.config/shittyTunnel.toml
 ```bash
 curl -H "Host: dev1.example.com" http://localhost:8080/
 ```
+
+### 6. Open the inspector dashboard
+
+While the client is running, open **http://localhost:3001** in your browser.
+
+The inspector shows every proxied request in real-time: status, method, path, duration, response size, a waterfall bar for relative timing, and a collapsible detail panel with headers and body (JSON pretty-printed).
+
+To configure the dashboard add a `[dashboard]` section to your client config:
+
+```toml
+[dashboard]
+enabled = true
+port = 3001       # port to listen on (localhost)
+max_events = 500  # circular buffer size
+```
+
+The section is optional — when omitted the dashboard starts on port 3001 with a 500-event buffer. Set `enabled = false` to disable it entirely (e.g. in headless/CI environments).
 
 ## Installation
 
@@ -292,6 +310,37 @@ names = ["Authorization", "Cookie", "X-Internal-Secret"]
 | Prevent credentials from reaching the local service | `[local.remove_headers]` |
 | Override a response header before it reaches the caller | `[local.add_headers]` |
 | Strip sensitive response headers (e.g. `Server`, `X-Powered-By`) | `[local.remove_headers]` |
+
+## Inspector dashboard
+
+The client binary embeds a web-based request inspector (similar to ngrok's inspector). No Node.js or separate process needed — it starts automatically alongside the tunnel.
+
+```toml
+# ~/.config/shittyTunnel.toml
+
+[dashboard]
+enabled = true    # set false to disable (e.g. in CI)
+port = 3001       # http://localhost:<port>
+max_events = 500  # number of requests kept in the circular buffer
+```
+
+Open `http://localhost:3001` while the client is running. The UI connects via WebSocket and receives two-phase events:
+
+1. **`request_started`** — request appears immediately (status shown as pending)
+2. **`request_completed`** — status, headers, body and duration update in place
+
+**Features:**
+
+| Feature | Details |
+|---|---|
+| Live request table | Newest-first, updates in real-time via WebSocket |
+| Status badge | Colour-coded: green 2xx, blue 3xx, yellow 4xx, red 5xx |
+| Waterfall bar | Shows offset and duration relative to the current buffer window |
+| Detail panel | Click any row — expands request/response headers and body (JSON pretty-printed) |
+| Filters | Status group checkboxes, method dropdown, path substring search |
+| Clear | Empties buffer on both client and dashboard simultaneously |
+
+> The dashboard listens on `0.0.0.0` so it is reachable from the host when running inside Docker. Bind it to `127.0.0.1` at the network level (firewall/compose ports) if you don't want it exposed.
 
 ## Further reading
 

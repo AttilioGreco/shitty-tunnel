@@ -92,6 +92,7 @@ shitty-tunnel client --config ~/.config/shittyTunnel.toml
 # INFO connected to localhost:8443
 # INFO authenticated, tunnel active for dev1.example.com
 # INFO forwarding to 127.0.0.1:3000
+# INFO dashboard listening on 0.0.0.0:3001
 ```
 
 ### 7. Test the tunnel
@@ -103,6 +104,25 @@ curl -H "Host: dev1.example.com" http://localhost:8080/
 # Server forwards to client, which forwards to localhost:3000
 # You should see the response from your local service
 ```
+
+### 8. Open the inspector dashboard
+
+While the client is running, open **http://localhost:3001** in your browser.
+
+The dashboard shows every proxied request in real-time:
+
+- **Status** badge (colour-coded 2xx / 3xx / 4xx / 5xx)
+- **Method**, **path**, **duration**, **response size**
+- **Waterfall bar** — relative timing across all requests in the current buffer
+- **Request / response detail** — headers and body (JSON pretty-printed) on row click
+- **Filters** — by status group, HTTP method, and path substring
+- **Clear** button — empties the buffer on both client and dashboard
+
+The dashboard is embedded in the client binary — no separate install or Node.js required.
+
+> **Tip:** to disable the dashboard (e.g. in CI or production-like environments),
+> set `enabled = false` in the `[dashboard]` section of your config, or omit the
+> section entirely (defaults: `enabled = true`, `port = 3001`, `max_events = 500`).
 
 ---
 
