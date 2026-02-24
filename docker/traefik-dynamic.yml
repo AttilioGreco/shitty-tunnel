@@ -1,11 +1,30 @@
 # Traefik v3 - Dynamic Configuration
 http:
   routers:
+    # --- Entrypoint 1: simulazione lato server ---
+    # Tutto il traffico su :5000 va al tunnel server
     tunnel-router:
-      rule: "HostRegexp(`^.+$`)"  # Match tutti gli host
+      rule: "HostRegexp(`^.+$`)"
       service: shitty-server
       entryPoints:
         - web
+      priority: 1
+
+    # --- Entrypoint 2: client dashboard su :4000 ---
+    # /api/* → client Rust (porta 3001)
+    dashboard-api-router:
+      rule: "PathPrefix(`/api`)"
+      service: shitty-client
+      entryPoints:
+        - dashboard
+      priority: 10
+
+    # Tutto il resto → frontend TanStack Start (porta 3000)
+    dashboard-fe-router:
+      rule: "PathPrefix(`/`)"
+      service: shitty-client-frontend
+      entryPoints:
+        - dashboard
       priority: 1
 
   services:
@@ -14,3 +33,13 @@ http:
         servers:
           - url: "http://server:8080"
         passHostHeader: true
+
+    shitty-client:
+      loadBalancer:
+        servers:
+          - url: "http://client:3001"
+
+    shitty-client-frontend:
+      loadBalancer:
+        servers:
+          - url: "http://client-frontend:3000"

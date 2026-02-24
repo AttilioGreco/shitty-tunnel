@@ -1,17 +1,20 @@
 # Traefik v3 - Static Configuration
 api:
   dashboard: true
-  insecure: true  # Dashboard su :8080/dashboard/
+  insecure: true  # Dashboard su :8081/dashboard/
 
 log:
   level: INFO
 
 entryPoints:
   web:
-    address: ":5000"  # Porta pubblica per il traffico tunnelato
+    address: ":5000"  # Entrypoint 1: simulazione lato server (traffico tunnel)
 
-  traefik:
-    address: ":8081"  # Dashboard e API
+  dashboard:
+    address: ":4000"  # Entrypoint 2: client dashboard (frontend + /api)
+
+  # traefik:
+  #   address: ":8081"  # Dashboard e API Traefik
 
 providers:
   docker:

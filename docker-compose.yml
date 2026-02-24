@@ -5,8 +5,9 @@ services:
     container_name: shitty-traefik
     restart: unless-stopped
     ports:
-      - "5000:5000"   # HTTP pubblico (traffico tunnelato)
-      - "8081:8081"   # Dashboard Traefik
+      - "5000:5000"   # Entrypoint 1: simulazione lato server (traffico tunnelato)
+      - "4000:4000"   # Entrypoint 2: client dashboard (frontend + /api)
+      # - "8081:8081"   # Dashboard Traefik
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./docker/traefik.yml:/etc/traefik/traefik.yml:ro
@@ -20,10 +21,6 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     container_name: shitty-server
-    restart: unless-stopped
-    ports:
-      - "8080:8080"   # HTTP public port
-      - "8443:8443"   # gRPC tunnel port
     volumes:
       - .:/app:cached
       - cargo-cache:/usr/local/cargo/registry
@@ -35,13 +32,12 @@ services:
     networks:
       - shitty-tunnel-net
 
-  # shittyTunnel Client (con hot-reload)
+  # shittyTunnel Client (con hot-reload) - esporrà /api su :3001
   client:
     build:
       context: .
       dockerfile: Dockerfile.dev
     container_name: shitty-client
-    restart: unless-stopped
     volumes:
       - .:/app:cached
       - cargo-cache:/usr/local/cargo/registry
@@ -55,11 +51,22 @@ services:
     networks:
       - shitty-tunnel-net
 
+  # Client dashboard frontend (TanStack Start + Vite, dev su :3000)
+  client-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: shitty-client-frontend
+    volumes:
+      - ./frontend:/app:cached
+      - /app/node_modules
+    networks:
+      - shitty-tunnel-net
+
   # App di test HTTP
   whoami:
     image: traefik/whoami:latest
     container_name: shitty-whoami
-    restart: unless-stopped
     environment:
       - WHOAMI_PORT_NUMBER=80
       - WHOAMI_NAME=TestApp
