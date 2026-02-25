@@ -65,7 +65,7 @@ fi
 # Helper to revert file changes on failure
 revert_files() {
     warn "Reverting file changes..."
-    git checkout Cargo.toml Cargo.lock CHANGELOG.md 2>/dev/null || true
+    git checkout Cargo.toml Cargo.lock CHANGELOG.md dist-workspace.toml .github/workflows/release.yml 2>/dev/null || true
 }
 
 # 1. Update Cargo.toml version
@@ -119,31 +119,45 @@ else
 fi
 echo
 
-# 4. Show changes
-echo
-info "Changes to be committed:"
-git diff --color=always Cargo.toml Cargo.lock CHANGELOG.md | head -50
+# 4. Refresh cargo-dist generated files (release workflow)
+info "Refreshing cargo-dist generated files..."
+if cargo dist --version > /dev/null 2>&1; then
+    if cargo dist generate-ci > /dev/null 2>&1; then
+        success "cargo-dist workflow regenerated"
+    else
+        warn "Failed to regenerate cargo-dist workflow (continuing)"
+    fi
+else
+    warn "cargo-dist is not installed; skipping workflow regeneration"
+    warn "Install with: cargo install cargo-dist --locked --version 0.30.3"
+fi
 echo
 
-# 5. Confirm before committing
+# 5. Show changes
+echo
+info "Changes to be committed:"
+git diff --color=always Cargo.toml Cargo.lock CHANGELOG.md dist-workspace.toml .github/workflows/release.yml | head -80
+echo
+
+# 6. Confirm before committing
 read -p "$(echo -e ${GREEN}Commit these changes?${NC} [Y/n] )" -n 1 -r
 echo
 if [[ $REPLY =~ ^[Nn]$ ]]; then
     warn "Restoring original files..."
-    git checkout Cargo.toml Cargo.lock CHANGELOG.md
+    git checkout Cargo.toml Cargo.lock CHANGELOG.md dist-workspace.toml .github/workflows/release.yml
     error "Release cancelled"
 fi
 
-# 6. Commit changes
+# 7. Commit changes
 info "Creating commit..."
-git add Cargo.toml Cargo.lock CHANGELOG.md
+git add Cargo.toml Cargo.lock CHANGELOG.md dist-workspace.toml .github/workflows/release.yml
 if git commit -m "chore: bump version to ${TAG}"; then
     success "Commit created"
 else
     error "Failed to create commit"
 fi
 
-# 7. Build check (optional) — before tagging so a failure leaves no tag behind
+# 8. Build check (optional) — before tagging so a failure leaves no tag behind
 echo
 info "Testing Docker build..."
 if docker build -t "shittytunnel:${VERSION}" . > /dev/null 2>&1; then
@@ -152,7 +166,7 @@ else
     warn "Docker build failed (this won't prevent the release)"
 fi
 
-# 8. Create git tag — last git operation before push
+# 9. Create git tag — last git operation before push
 info "Creating tag ${TAG}..."
 if git tag -a "$TAG" -m "Release ${TAG}"; then
     success "Tag created: ${TAG}"
@@ -160,7 +174,7 @@ else
     error "Failed to create tag"
 fi
 
-# 9. Push to remote
+# 10. Push to remote
 echo
 if [ "$NO_PUSH" = true ]; then
     warn "Skipping push (--no-push flag)"
