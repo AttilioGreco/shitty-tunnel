@@ -138,13 +138,6 @@ jobs:
       - name: Install dependencies
         run: |
           ${{ matrix.packages_install }}
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-      - name: Build frontend
-        working-directory: frontend
-        run: |
-          bun install --frozen-lockfile
-          bun run build:embed
       - name: Build artifacts
         run: |
           # Actually do builds and make zips and whatnot

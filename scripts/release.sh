@@ -121,15 +121,16 @@ echo
 
 # 4. Refresh cargo-dist generated files (release workflow)
 info "Refreshing cargo-dist generated files..."
-if cargo dist --version > /dev/null 2>&1; then
-    if cargo dist generate-ci > /dev/null 2>&1; then
-        success "cargo-dist workflow regenerated"
-    else
-        warn "Failed to regenerate cargo-dist workflow (continuing)"
-    fi
+if ! cargo dist --version > /dev/null 2>&1; then
+    revert_files
+    error "cargo-dist is required for release checks. Install with: cargo install cargo-dist --locked --version 0.30.3"
+fi
+
+if cargo dist generate-ci > /dev/null 2>&1; then
+    success "cargo-dist workflow regenerated"
 else
-    warn "cargo-dist is not installed; skipping workflow regeneration"
-    warn "Install with: cargo install cargo-dist --locked --version 0.30.3"
+    revert_files
+    error "Failed to regenerate cargo-dist workflow"
 fi
 echo
 
@@ -157,7 +158,17 @@ else
     error "Failed to create commit"
 fi
 
-# 8. Build check (optional) — before tagging so a failure leaves no tag behind
+# 8. cargo-dist preflight (same dist planning step used in CI)
+echo
+info "Running cargo-dist preflight..."
+DIST_PLAN_FILE="/tmp/plan-dist-manifest-${TAG}.json"
+if dist host --steps=create --tag="${TAG}" --output-format=json > "${DIST_PLAN_FILE}"; then
+    success "cargo-dist preflight passed"
+else
+    error "cargo-dist preflight failed. Fix the reported issue before creating the tag."
+fi
+
+# 9. Build check (optional) — before tagging so a failure leaves no tag behind
 echo
 info "Testing Docker build..."
 if docker build -t "shittytunnel:${VERSION}" . > /dev/null 2>&1; then
@@ -166,7 +177,7 @@ else
     warn "Docker build failed (this won't prevent the release)"
 fi
 
-# 9. Create git tag — last git operation before push
+# 10. Create git tag — last git operation before push
 info "Creating tag ${TAG}..."
 if git tag -a "$TAG" -m "Release ${TAG}"; then
     success "Tag created: ${TAG}"
@@ -174,7 +185,7 @@ else
     error "Failed to create tag"
 fi
 
-# 10. Push to remote
+# 11. Push to remote
 echo
 if [ "$NO_PUSH" = true ]; then
     warn "Skipping push (--no-push flag)"
