@@ -60,7 +60,6 @@ pub async fn run_server(config_path: PathBuf) -> Result<()> {
     let state = Arc::new(crate::app::AppState {
         tunnels: RwLock::new(HashMap::new()),
         authenticator,
-        peer_repository,
         config: config_provider,
     });
 

@@ -7,13 +7,11 @@ use tokio::sync::{mpsc, oneshot, RwLock};
 use st_domain::model::request::{ProxiedRequest, ProxiedResponse};
 use st_domain::port::auth::Authenticator;
 use st_domain::port::config::ServerConfigProvider;
-use st_domain::port::peer::PeerRepository;
 use st_protocol::proto::shitty_tunnel_server::ShittyTunnelServer;
 
 pub struct AppState {
     pub tunnels: RwLock<HashMap<String, TunnelHandle>>,
     pub authenticator: Arc<dyn Authenticator>,
-    pub peer_repository: Arc<dyn PeerRepository>,
     pub config: Arc<dyn ServerConfigProvider>,
 }
 
