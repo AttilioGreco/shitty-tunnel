@@ -44,3 +44,9 @@ dist-include = [
     "../../examples/client.toml",
     "../../examples/README.md",
 ]
+
+[package.metadata.wix]
+upgrade-guid = "155D5767-E1B6-4938-990F-BA3279F64974"
+path-guid = "045353CE-856C-4392-A9E8-B1685045360D"
+license = false
+eula = false

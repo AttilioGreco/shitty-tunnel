@@ -8,33 +8,24 @@ cargo-dist-version = "0.30.3"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
-installers = ["shell", "powershell", "homebrew"]
+installers = ["shell", "powershell", "homebrew", "msi"]
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = [
-    # Linux x86_64
-    "x86_64-unknown-linux-gnu",      # glibc (Debian/Ubuntu/Fedora)
-    "x86_64-unknown-linux-musl",     # musl static (universal Linux)
-    # Linux ARM64
-    "aarch64-unknown-linux-gnu",     # glibc (Raspberry Pi 4/5, ARM servers)
-    "aarch64-unknown-linux-musl",    # musl static (universal ARM)
-    # macOS
-    "x86_64-apple-darwin",           # Intel Mac
-    "aarch64-apple-darwin",          # Apple Silicon (M1/M2/M3)
-    # Windows
-    "x86_64-pc-windows-msvc",        # Windows x64
-]
-# Whether to consider the binaries in a package for distribution (defaults to true)
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "aarch64-unknown-linux-musl", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
+# Whether to consider the binaries in a package for distribution (defaults true)
 dist = true
-# Whether to auto-include files like README and LICENSE
+# Whether to auto-include files like READMEs, LICENSEs, and CHANGELOGs (default true)
 auto-includes = true
-# Publish jobs to run in CI
+# Which actions to run on pull requests
 pr-run-mode = "skip"
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+# Whether to install an updater program
+install-updater = false
 
 # System dependencies needed for build
 [dist.dependencies.homebrew]
 protobuf = '*'
 node = '*'
-bun = '*'
 
 [dist.dependencies.apt]
 protobuf-compiler = '*'

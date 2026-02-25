@@ -12,8 +12,8 @@ server_port = 8443
 # You can use environment variables with the syntax ${VAR_NAME}
 # Example: private_key = "${CLIENT_PRIVATE_KEY}"
 #          server_public_key = "${SERVER_PUBLIC_KEY}"
-private_key = "PATS7QnQD+LMGDez8EDi0YCvVx1zjWs1nSu3HjFZ3Fg="  # Client private key
-server_public_key = "P1j5jRykDgudgNJNnrJVXHx85W3koAapuyCnCKcq8XM="  # Server public key
+private_key       = ""  # Client private key
+server_public_key = ""  # Server public key
 
 [local]
 host = "127.0.0.1"
@@ -36,11 +36,11 @@ max_delay_ms = 30000  # Exponential backoff: 1s, 2s, 4s, 8s, 16s, 30s...
 
 # ─── Inspector Dashboard ──────────────────────────────────────────────────────
 # Embedded web UI that shows all proxied requests in real-time.
-# Open http://localhost:3001 in your browser while the client is running.
+# Open http://localhost:3000 in your browser while the client is running.
 #
 # The dashboard is served directly by the client binary — no separate install.
 #
 [dashboard]
 enabled = true
-port = 3001       # Dashboard listens on this port (localhost only)
+port = 3000       # Dashboard listens on this port (localhost only)
 max_events = 500  # How many requests to keep in the circular buffer
