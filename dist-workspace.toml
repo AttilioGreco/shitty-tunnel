@@ -33,11 +33,17 @@ pr-run-mode = "skip"
 # System dependencies needed for build
 [dist.dependencies.homebrew]
 protobuf = '*'
+node = '*'
+bun = '*'
 
 [dist.dependencies.apt]
 protobuf-compiler = '*'
 libssl-dev = '*'
 pkg-config = '*'
+nodejs = '*'
+npm = '*'
 
 [dist.dependencies.chocolatey]
 protoc = '*'
+nodejs-lts = '*'
+bun = '*'
