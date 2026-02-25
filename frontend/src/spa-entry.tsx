@@ -1,4 +1,4 @@
-import { StrictMode, startTransition, Suspense } from "react";
+import { startTransition, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
@@ -21,10 +21,8 @@ const root = createRoot(document.getElementById("root")!);
 // the new route is loading (React 19 concurrent rendering)
 startTransition(() => {
   root.render(
-    <StrictMode>
-      <Suspense>
-        <RouterProvider router={router} />
-      </Suspense>
-    </StrictMode>,
+    <Suspense>
+      <RouterProvider router={router} />
+    </Suspense>,
   );
 });
