@@ -1,7 +1,7 @@
 # shittyTunnel
 
-[![Release](https://img.shields.io/github/v/release/AttilioGreco/shittyTunnel)](https://github.com/AttilioGreco/shittyTunnel/releases)
-[![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://github.com/AttilioGreco/shittyTunnel/pkgs/container/shittytunnel)
+[![Release](https://img.shields.io/github/v/release/AttilioGreco/shittyTunnel)](https://github.com/AttilioGreco/shitty-tunnel/releases)
+[![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://github.com/AttilioGreco/shitty-tunnel/pkgs/container/shittytunnel)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE)
 
 A self-hosted tunnel for exposing local services to the internet.
@@ -169,7 +169,7 @@ docker run -d \
 Requires Rust 1.85+ and protobuf compiler (`protoc`).
 
 ```bash
-git clone https://github.com/AttilioGreco/shittyTunnel.git
+git clone https://github.com/AttilioGreco/shitty-tunnel
 cd shittyTunnel
 
 # Build and install (requires just: cargo install just)
