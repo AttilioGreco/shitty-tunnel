@@ -1,6 +1,6 @@
 # shittyTunnel
 
-[![Release](https://img.shields.io/github/v/release/AttilioGreco/shittyTunnel)](https://github.com/AttilioGreco/shitty-tunnel/releases)
+[![Release](https://img.shields.io/github/v/release/AttilioGreco/shitty-tunnel)](https://github.com/AttilioGreco/shitty-tunnel/releases)
 [![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://github.com/AttilioGreco/shitty-tunnel/pkgs/container/shittytunnel)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE)
 

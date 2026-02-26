@@ -220,7 +220,7 @@ else
             info "Next steps:"
             echo "  1. Monitor GitHub Actions: https://github.com/AttilioGreco/shitty-tunnel/actions"
             echo "  2. Check release page: https://github.com/AttilioGreco/shitty-tunnel/releases/tag/${TAG}"
-            echo "  3. Verify Docker image: docker pull ghcr.io/attiliogreco/shittytunnel:${VERSION}"
+            echo "  3. Verify Docker image: docker pull ghcr.io/AttilioGreco/shitty-tunnel:${VERSION}"
             echo "  4. Check Trivy scan in Security tab"
         else
             error "Failed to push to remote"
