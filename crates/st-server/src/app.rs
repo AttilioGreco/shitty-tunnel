@@ -37,7 +37,10 @@ pub async fn run(state: Arc<AppState>) -> Result<()> {
 
     let tunnel_service = crate::tunnel_handler::TunnelGrpcService::new(state.clone());
     let grpc_server = tonic::transport::Server::builder()
-        .add_service(ShittyTunnelServer::new(tunnel_service))
+        .add_service(
+            ShittyTunnelServer::new(tunnel_service)
+                .max_decoding_message_size(st_protocol::GRPC_MAX_MESSAGE_SIZE),
+        )
         .serve(tunnel_addr);
 
     tokio::select! {

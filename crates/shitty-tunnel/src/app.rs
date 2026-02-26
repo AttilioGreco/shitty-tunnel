@@ -42,7 +42,10 @@ pub async fn run(state: Arc<AppState>) -> Result<()> {
     let grpc_server = tonic::transport::Server::builder()
         .http2_keepalive_interval(Some(std::time::Duration::from_secs(20)))
         .http2_keepalive_timeout(Some(std::time::Duration::from_secs(60)))
-        .add_service(ShittyTunnelServer::new(tunnel_service))
+        .add_service(
+            ShittyTunnelServer::new(tunnel_service)
+                .max_decoding_message_size(st_protocol::GRPC_MAX_MESSAGE_SIZE),
+        )
         .serve(tunnel_addr);
 
     tokio::select! {

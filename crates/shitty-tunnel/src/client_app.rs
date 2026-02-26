@@ -114,8 +114,11 @@ impl ClientApp {
 
         tracing::debug!("HTTP/2 keepalive configured: interval=20s, timeout=60s");
 
-        let mut client = ShittyTunnelClient::connect(endpoint_url).await
+        let channel = endpoint_url.connect().await
             .map_err(|e| anyhow::anyhow!("failed to connect to {}: {}", endpoint, e))?;
+
+        let mut client = ShittyTunnelClient::new(channel)
+            .max_decoding_message_size(st_protocol::GRPC_MAX_MESSAGE_SIZE);
 
         tracing::info!("connected to {endpoint}");
 

@@ -31,7 +31,7 @@ impl ClientApp {
         loop {
             match self.connect_and_serve().await {
                 Ok(()) => {
-                    tracing::info!("tunnel closed gracefully");
+                    tracing::info!("tunnel closed gracefully --- exiting");
                     break;
                 }
                 Err(e) => {
@@ -57,7 +57,11 @@ impl ClientApp {
 
         tracing::info!("connecting to {endpoint}");
 
-        let mut client = ShittyTunnelClient::connect(endpoint.clone()).await?;
+        let channel = tonic::transport::Endpoint::from_shared(endpoint.clone())?
+            .connect()
+            .await?;
+        let mut client = ShittyTunnelClient::new(channel)
+            .max_decoding_message_size(st_protocol::GRPC_MAX_MESSAGE_SIZE);
 
         tracing::info!("connected to {endpoint}");
 
