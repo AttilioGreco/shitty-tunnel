@@ -89,7 +89,8 @@ impl ClientApp {
         tracing::info!("connecting to {endpoint}");
 
         // Parse endpoint to extract hostname for SNI
-        let endpoint_url = endpoint.parse::<tonic::transport::Endpoint>()?;
+        let endpoint_url = endpoint.parse::<tonic::transport::Endpoint>()
+            .map_err(|e| anyhow::anyhow!("failed to parse endpoint '{}': {}", endpoint, e))?;
 
         // For HTTPS, configure TLS with proper SNI
         let endpoint_url = if endpoint.starts_with("https://") {
@@ -100,22 +101,27 @@ impl ClientApp {
             tracing::debug!("configuring TLS with domain: {}", domain);
 
             endpoint_url
-                .tls_config(tonic::transport::ClientTlsConfig::new()
-                    .domain_name(domain))?
+                .tls_config(
+                    tonic::transport::ClientTlsConfig::new()
+                        .with_webpki_roots()
+                        .domain_name(domain),
+                )?
         } else {
             endpoint_url
         };
 
-        // Configure HTTP/2 keepalive to prevent connection timeouts
+        // Configure HTTP/2 keepalive and connection timeout
         let endpoint_url = endpoint_url
+            .connect_timeout(Duration::from_secs(10))
             .http2_keep_alive_interval(Duration::from_secs(20))
             .keep_alive_timeout(Duration::from_secs(60))
             .keep_alive_while_idle(true);
 
-        tracing::debug!("HTTP/2 keepalive configured: interval=20s, timeout=60s");
+        tracing::debug!("HTTP/2 keepalive configured: interval=20s, timeout=60s, connect_timeout=10s");
+        tracing::debug!("dialing TCP/TLS to {endpoint} ...");
 
         let channel = endpoint_url.connect().await
-            .map_err(|e| anyhow::anyhow!("failed to connect to {}: {}", endpoint, e))?;
+            .map_err(|e| anyhow::anyhow!("failed to connect to {}: {:#}", endpoint, e))?;
 
         let mut client = ShittyTunnelClient::new(channel)
             .max_decoding_message_size(st_protocol::GRPC_MAX_MESSAGE_SIZE);
