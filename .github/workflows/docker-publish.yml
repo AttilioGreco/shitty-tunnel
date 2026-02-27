@@ -22,9 +22,9 @@ jobs:
       matrix:
         include:
           - platform: linux/amd64
-            runner: ubuntu-22.04
+            runner: ubuntu-24.04
           - platform: linux/arm64
-            runner: ubuntu-22.04-arm
+            runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Set lowercase image name
@@ -86,7 +86,7 @@ jobs:
 
   # Merge all platform images into a multi-arch manifest
   merge:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: build
     outputs:
       version: ${{ steps.meta.outputs.version }}
@@ -147,7 +147,7 @@ jobs:
 
   # Security scanning
   scan:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     needs: merge
     steps:
       - name: Set lowercase image name

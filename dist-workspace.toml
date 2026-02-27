@@ -24,8 +24,8 @@ install-updater = false
 
 # Use native ARM runners instead of QEMU for aarch64 Linux targets
 [dist.github-custom-runners]
-aarch64-unknown-linux-gnu = "ubuntu-22.04-arm"
-aarch64-unknown-linux-musl = "ubuntu-22.04-arm"
+aarch64-unknown-linux-gnu = "ubuntu-24.04-arm"
+aarch64-unknown-linux-musl = "ubuntu-24.04-arm"
 
 # System dependencies needed for build
 [dist.dependencies.homebrew]
