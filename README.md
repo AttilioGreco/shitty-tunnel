@@ -269,9 +269,9 @@ This project uses [just](https://github.com/casey/just) as a task runner. Run `j
 | Command | Description |
 |---|---|
 | `just build` | Build debug binary |
-| `just release` | Build release binary |
+| `just release` | Build release binary (always forcing fresh frontend embed assets) |
 | `just test` | Run all workspace tests |
-| `just install` | Build release and install to `/usr/local/bin` |
+| `just install` | Build release with fresh frontend assets and install to `/usr/local/bin` |
 | `just install-systemd-server` | Install server systemd unit |
 | `just install-systemd-client` | Install client systemd user unit |
 | `just up` / `just down` | Start/stop Docker Compose dev environment |

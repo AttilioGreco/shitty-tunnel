@@ -119,7 +119,18 @@ else
 fi
 echo
 
-# 4. Refresh cargo-dist generated files (release workflow)
+# 4. Build release binary with fresh embedded frontend assets
+info "Building release binary with fresh frontend assets..."
+rm -rf frontend/dist
+if ST_REQUIRE_FRONTEND=1 cargo build --release --bin shitty-tunnel --quiet; then
+    success "Release build successful (frontend rebuilt)"
+else
+    revert_files
+    error "Release build failed (including frontend embed build)"
+fi
+echo
+
+# 5. Refresh cargo-dist generated files (release workflow)
 info "Refreshing cargo-dist generated files..."
 if ! cargo dist --version > /dev/null 2>&1; then
     revert_files
@@ -134,13 +145,13 @@ else
 fi
 echo
 
-# 5. Show changes
+# 6. Show changes
 echo
 info "Changes to be committed:"
 git diff --color=always Cargo.toml Cargo.lock CHANGELOG.md dist-workspace.toml .github/workflows/release.yml | head -80
 echo
 
-# 6. Confirm before committing
+# 7. Confirm before committing
 read -p "$(echo -e ${GREEN}Commit these changes?${NC} [Y/n] )" -n 1 -r
 echo
 if [[ $REPLY =~ ^[Nn]$ ]]; then
@@ -149,7 +160,7 @@ if [[ $REPLY =~ ^[Nn]$ ]]; then
     error "Release cancelled"
 fi
 
-# 7. Commit changes
+# 8. Commit changes
 info "Creating commit..."
 git add Cargo.toml Cargo.lock CHANGELOG.md dist-workspace.toml .github/workflows/release.yml
 if git commit -m "chore: bump version to ${TAG}"; then
@@ -158,7 +169,7 @@ else
     error "Failed to create commit"
 fi
 
-# 8. cargo-dist preflight (same dist planning step used in CI)
+# 9. cargo-dist preflight (same dist planning step used in CI)
 echo
 info "Running cargo-dist preflight..."
 DIST_PLAN_FILE="/tmp/plan-dist-manifest-${TAG}.json"
@@ -168,7 +179,7 @@ else
     error "cargo-dist preflight failed. Fix the reported issue before creating the tag."
 fi
 
-# 9. Build check (optional) — before tagging so a failure leaves no tag behind
+# 10. Build check (optional) — before tagging so a failure leaves no tag behind
 echo
 info "Testing Docker build..."
 if docker build -t "shittytunnel:${VERSION}" . > /dev/null 2>&1; then
@@ -177,7 +188,7 @@ else
     warn "Docker build failed (this won't prevent the release)"
 fi
 
-# 10. Create git tag — last git operation before push
+# 11. Create git tag — last git operation before push
 info "Creating tag ${TAG}..."
 if git tag -a "$TAG" -m "Release ${TAG}"; then
     success "Tag created: ${TAG}"
@@ -185,7 +196,7 @@ else
     error "Failed to create tag"
 fi
 
-# 11. Push to remote
+# 12. Push to remote
 echo
 if [ "$NO_PUSH" = true ]; then
     warn "Skipping push (--no-push flag)"

@@ -14,9 +14,14 @@ set shell := ["bash", "-c"]
 build:
     cargo build --bin shitty-tunnel
 
+# Force fresh embedded frontend assets on next Rust build
+frontend-fresh:
+    @echo "Forcing fresh frontend embed build (removing frontend/dist)..."
+    rm -rf frontend/dist
+
 # Build release binary
-release:
-    cargo build --release --bin shitty-tunnel
+release: frontend-fresh
+    ST_REQUIRE_FRONTEND=1 cargo build --release --bin shitty-tunnel
 
 # Run all workspace tests
 test:
@@ -126,9 +131,9 @@ dist-plan:
     cargo dist plan
 
 # Build multi-platform release
-dist-build:
+dist-build: frontend-fresh
     @echo "=== Building multi-platform release with cargo-dist ==="
-    cargo dist build --artifacts all
+    ST_REQUIRE_FRONTEND=1 cargo dist build --artifacts all
     @echo ""
     @echo "Artifacts in: target/distrib/"
     @ls -lh target/distrib/ 2>/dev/null | grep -E '\.(tar\.|zip|installer)' || echo "No artifacts found"
