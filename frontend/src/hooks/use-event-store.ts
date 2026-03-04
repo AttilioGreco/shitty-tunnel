@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type {
   InspectorStats,
   RequestEvent,
@@ -7,26 +7,26 @@ import type {
 
 export function useEventStore() {
   const eventsRef = useRef(new Map<number, RequestEvent>());
-  const versionRef = useRef(0);
-  const listenersRef = useRef(new Set<() => void>());
+  const [tick, bump] = useReducer((n: number) => n + 1, 0);
+  const rafRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
 
-  const subscribe = useCallback((listener: () => void) => {
-    listenersRef.current.add(listener);
+  // Cancel any pending rAF on unmount to avoid calling dispatch after unmount.
+  useEffect(() => {
     return () => {
-      listenersRef.current.delete(listener);
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
   }, []);
 
-  const getVersion = useCallback(() => versionRef.current, []);
-
-  const version = useSyncExternalStore(subscribe, getVersion, getVersion);
-
+  // Rate-limited notify: coalesces rapid WebSocket messages into one render
+  // per animation frame (~16 ms), preventing the useSyncExternalStore tearing
+  // loop that froze the browser when events arrived faster than React could render.
   const notify = useCallback(() => {
-    versionRef.current++;
-    for (const listener of listenersRef.current) {
-      listener();
-    }
-  }, []);
+    if (rafRef.current !== null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      bump();
+    });
+  }, [bump]);
 
   const handleMessage = useCallback(
     (msg: WsServerMessage) => {
@@ -66,21 +66,26 @@ export function useEventStore() {
     [notify],
   );
 
+  // Clear is called directly by the user action: skip the rAF and render
+  // immediately so the table empties without a visible delay.
   const clear = useCallback(() => {
     eventsRef.current.clear();
-    notify();
-  }, [notify]);
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    bump();
+  }, [bump]);
 
   const events = useMemo((): RequestEvent[] => {
-    // Force re-compute when version changes
-    void version;
+    void tick;
     return Array.from(eventsRef.current.values()).sort(
       (a, b) => b.id - a.id,
     );
-  }, [version]);
+  }, [tick]);
 
   const stats = useMemo((): InspectorStats => {
-    void version;
+    void tick;
     const all = Array.from(eventsRef.current.values());
     const total = all.length;
     const errors = all.filter(
@@ -97,7 +102,7 @@ export function useEventStore() {
       errorRate: total > 0 ? (errors / total) * 100 : 0,
       avgLatency,
     };
-  }, [version]);
+  }, [tick]);
 
   return { events, stats, handleMessage, clear };
 }

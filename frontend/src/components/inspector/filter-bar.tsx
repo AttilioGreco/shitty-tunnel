@@ -1,4 +1,4 @@
-import { useState } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -85,10 +85,10 @@ export function FilterBar({
 
       <div className="ml-auto">
         <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="outline" size="sm" className="text-xs h-8">
-              Clear
-            </Button>
+          <AlertDialogTrigger
+            render={<Button variant="outline" size="sm" className="text-xs h-8" />}
+          >
+            Clear
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>

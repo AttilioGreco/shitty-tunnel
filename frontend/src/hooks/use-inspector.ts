@@ -21,8 +21,8 @@ export function useInspector() {
   });
 
   const clear = useCallback(() => {
-    send({ type: "clear" });
-    clearStore();
+    clearStore(); // immediate local clear (skips rAF, renders instantly)
+    send({ type: "clear" }); // server clears its buffer and confirms via "cleared"
   }, [send, clearStore]);
 
   return { events, stats, connected, clear };

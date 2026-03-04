@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
+import { Outlet, createRootRoute } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
 
@@ -17,8 +17,6 @@ export const Route = createRootRoute({
 
   // component is used in SPA mode (spa-entry.tsx)
   component: RootComponent,
-  // shellComponent is used in SSR mode (TanStack Start)
-  shellComponent: RootDocument,
 });
 
 function RootComponent() {
@@ -26,19 +24,5 @@ function RootComponent() {
     <Suspense>
       <Outlet />
     </Suspense>
-  );
-}
-
-function RootDocument({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        {children}
-        <Scripts />
-      </body>
-    </html>
   );
 }
