@@ -1,0 +1,17 @@
+[Unit]
+Description=shittyTunnel Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/shitty-tunnel server --config /etc/shittyTunnel/server.toml
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadOnlyPaths=/etc/shittyTunnel
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=shittyTunnel Client
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/shitty-tunnel client --config %h/.config/shittyTunnel.toml
+Restart=on-failure
+RestartSec=5
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=default.target
