@@ -17,8 +17,11 @@ dist = true
 auto-includes = true
 # Which actions to run on pull requests
 pr-run-mode = "skip"
-# Path that installers should place binaries in
-install-path = "CARGO_HOME"
+# Path strategy for shell/powershell installers:
+# 1) SHITTY_TUNNEL_INSTALL_DIR override
+# 2) Linux-friendly user bin default
+# 3) CARGO_HOME fallback
+install-path = ["$SHITTY_TUNNEL_INSTALL_DIR", "~/.local/bin", "CARGO_HOME"]
 # Whether to install an updater program
 install-updater = false
 
@@ -43,3 +46,14 @@ npm = '*'
 protoc = '*'
 nodejs-lts = '*'
 bun = '*'
+
+[[dist.extra-artifacts]]
+build = ["bash", "-lc", "mkdir -p target/dist-extra/systemd && cp packaging/systemd/shitty-tunnel-client.service packaging/systemd/shitty-tunnel-server.service target/dist-extra/systemd/"]
+artifacts = [
+	"target/dist-extra/systemd/shitty-tunnel-client.service",
+	"target/dist-extra/systemd/shitty-tunnel-server.service",
+]
+
+[[dist.extra-artifacts]]
+build = ["bash", "-lc", "mkdir -p target/dist-extra/scripts && cp scripts/install-systemd.sh target/dist-extra/scripts/"]
+artifacts = ["target/dist-extra/scripts/install-systemd.sh"]
