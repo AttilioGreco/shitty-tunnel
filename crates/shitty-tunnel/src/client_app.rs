@@ -225,8 +225,12 @@ impl ClientApp {
             self.config.local.host, self.config.local.port
         );
 
-        let http_client = reqwest::Client::builder().no_proxy().build()?;
+        let http_client = reqwest::Client::builder()
+            .no_proxy()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()?;
         let basic_auth = self.config.local.basic_auth.clone();
+        let max_body_size = self.config.local.max_body_size;
 
         // Read messages from server, spawn forwarding tasks
         while let Some(result) = in_stream.next().await {
@@ -265,6 +269,7 @@ impl ClientApp {
                             &auth,
                             add_headers.as_ref(),
                             remove_headers.as_ref(),
+                            max_body_size,
                         )
                         .await;
                         let duration_ms = start.elapsed().as_secs_f64() * 1000.0;

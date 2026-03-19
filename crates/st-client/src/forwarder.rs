@@ -7,6 +7,7 @@ pub async fn forward(
     req: ProxiedRequest,
     add_headers: Option<&AddHeaders>,
     remove_headers: Option<&RemoveHeaders>,
+    max_body_size: usize,
 ) -> ProxiedResponse {
     let url = format!("{}{}", base_url, req.uri);
     let method = reqwest::Method::from_bytes(req.method.as_bytes()).unwrap_or(reqwest::Method::GET);
@@ -65,7 +66,31 @@ pub async fn forward(
                 }
             }
 
+            // Early reject if content-length exceeds the configured limit
+            let content_length = resp
+                .headers()
+                .get("content-length")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(0);
+            if content_length > max_body_size {
+                return ProxiedResponse {
+                    request_id: req.request_id,
+                    status: 502,
+                    headers: vec![("content-type".to_string(), "text/plain".to_string())],
+                    body: format!("response body too large: {content_length} bytes (limit: {max_body_size})").into_bytes(),
+                };
+            }
+
             let body = resp.bytes().await.unwrap_or_default().to_vec();
+            if body.len() > max_body_size {
+                return ProxiedResponse {
+                    request_id: req.request_id,
+                    status: 502,
+                    headers: vec![("content-type".to_string(), "text/plain".to_string())],
+                    body: format!("response body too large: {} bytes (limit: {max_body_size})", body.len()).into_bytes(),
+                };
+            }
 
             let elapsed = start.elapsed();
             tracing::info!("{} {} -> {} ({:.0?})", method, req.uri, status, elapsed);

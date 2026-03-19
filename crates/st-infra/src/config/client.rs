@@ -30,6 +30,10 @@ pub struct LocalSettings {
     pub add_headers: Option<AddHeaders>,
     /// Headers to remove from every proxied request and response.
     pub remove_headers: Option<RemoveHeaders>,
+    /// Maximum response body size in bytes. Responses exceeding this limit
+    /// will return a 502 error. Defaults to 100 MiB.
+    #[serde(default = "default_max_body_size")]
+    pub max_body_size: usize,
 }
 
 /// Map of header name → value to inject.
@@ -79,6 +83,9 @@ fn default_dashboard_port() -> u16 {
 }
 fn default_max_events() -> usize {
     500
+}
+fn default_max_body_size() -> usize {
+    100 * 1024 * 1024 // 100 MiB
 }
 
 impl Default for DashboardSettings {

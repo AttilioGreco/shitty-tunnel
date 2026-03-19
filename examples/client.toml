@@ -19,6 +19,7 @@ server_public_key = ""  # Server public key
 host = "127.0.0.1"
 port = 3000  # Port of your local service
 basic_auth = ""  # Basic authentication credentials (optional)
+# max_body_size = 104857600  # Max response body size in bytes (default: 100 MiB)
 
 # Headers to inject (or overwrite) on every proxied request AND response (optional)
 # [local.add_headers]
