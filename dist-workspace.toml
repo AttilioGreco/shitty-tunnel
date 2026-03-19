@@ -55,5 +55,8 @@ artifacts = [
 ]
 
 [[dist.extra-artifacts]]
-build = ["bash", "-lc", "mkdir -p target/dist-extra/scripts && cp scripts/install-systemd.sh target/dist-extra/scripts/"]
-artifacts = ["target/dist-extra/scripts/install-systemd.sh"]
+build = ["bash", "-lc", "mkdir -p target/dist-extra/scripts && cp scripts/install-client.sh scripts/install-server.sh target/dist-extra/scripts/"]
+artifacts = [
+	"target/dist-extra/scripts/install-client.sh",
+	"target/dist-extra/scripts/install-server.sh",
+]
