@@ -21,9 +21,9 @@ pr-run-mode = "skip"
 # 1) SHITTY_TUNNEL_INSTALL_DIR override
 # 2) Linux-friendly user bin default
 # 3) CARGO_HOME fallback
-install-path = ["$SHITTY_TUNNEL_INSTALL_DIR", "~/.local/bin", "CARGO_HOME"]
+install-path = ["$SHITTY_TUNNEL_INSTALL_DIR/", "~/.local/bin"]
 # Whether to install an updater program
-install-updater = false
+install-updater = true
 
 # Use native ARM runners instead of QEMU for aarch64 Linux targets
 [dist.github-custom-runners]
