@@ -11,8 +11,25 @@ mod app;
 mod public_handler;
 mod tunnel_handler;
 
+fn long_version() -> &'static str {
+    static LONG: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    LONG.get_or_init(|| {
+        format!(
+            "{}\ncommit: {}\nbuilt:  {}",
+            env!("CARGO_PKG_VERSION"),
+            env!("ST_GIT_SHA"),
+            env!("ST_BUILD_DATE"),
+        )
+    })
+}
+
 #[derive(Parser)]
-#[command(name = "shitty-tunnel", about = "Self-hosted HTTP tunnel")]
+#[command(
+    name = "shitty-tunnel",
+    about = "Self-hosted HTTP tunnel",
+    version,
+    long_version = long_version(),
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

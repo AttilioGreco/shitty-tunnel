@@ -1,0 +1,45 @@
+name: Update Release Notes
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  update-notes:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Add install instructions to release
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          REPO="${{ github.repository }}"
+          BASE="https://github.com/${REPO}/releases/download/${TAG}"
+
+          # Fetch current release body
+          gh release view "$TAG" --repo "$REPO" --json body -q '.body' > /tmp/current_body.txt
+
+          # Build new body
+          {
+            echo "## Quick Install"
+            echo ""
+            echo "### Client (user-level, no sudo)"
+            echo '```bash'
+            echo "curl -sSL ${BASE}/install-client.sh | bash"
+            echo '```'
+            echo ""
+            echo "### Server (system-level, requires sudo)"
+            echo '```bash'
+            echo "curl -sSL ${BASE}/install-server.sh | sudo bash"
+            echo '```'
+            echo ""
+            echo "---"
+            echo ""
+            cat /tmp/current_body.txt
+          } > /tmp/new_body.txt
+
+          # Update the release
+          gh release edit "$TAG" --repo "$REPO" --notes-file /tmp/new_body.txt

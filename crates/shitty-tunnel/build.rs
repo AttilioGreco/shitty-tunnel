@@ -84,7 +84,53 @@ fn write_placeholder_frontend(dist_dir: &PathBuf) -> Result<(), String> {
         Ok(())
 }
 
+fn emit_build_info() {
+    // Git commit SHA
+    let git_sha = Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Git dirty flag
+    let git_dirty = Command::new("git")
+        .args(["status", "--porcelain"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .map(|o| !o.stdout.is_empty())
+        .unwrap_or(false);
+
+    let sha_display = if git_dirty {
+        format!("{git_sha}-dirty")
+    } else {
+        git_sha
+    };
+
+    // Build timestamp (UTC)
+    let build_date = chrono_lite_utc_now();
+
+    println!("cargo:rustc-env=ST_GIT_SHA={sha_display}");
+    println!("cargo:rustc-env=ST_BUILD_DATE={build_date}");
+}
+
+/// Minimal UTC timestamp without pulling in chrono.
+fn chrono_lite_utc_now() -> String {
+    let output = Command::new("date")
+        .args(["-u", "+%Y-%m-%d %H:%M:%S UTC"])
+        .output();
+
+    match output {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim().to_string(),
+        _ => "unknown".to_string(),
+    }
+}
+
 fn main() {
+    emit_build_info();
+
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let frontend_dir = manifest_dir.join("../../frontend");
     let dist_dir = manifest_dir.join("../../frontend/dist");
