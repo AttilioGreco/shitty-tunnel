@@ -1,7 +1,0 @@
-[package]
-name = "st-keygen"
-version.workspace = true
-edition.workspace = true
-
-[dependencies]
-st-infra = { workspace = true }
