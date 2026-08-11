@@ -1,15 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-mod server_main;
-mod client_app;
-mod client_forwarder;
-mod dashboard;
-
-// Server modules
-mod app;
-mod public_handler;
-mod tunnel_handler;
+use shitty_tunnel::{client_app, dashboard, server_main};
 
 fn long_version() -> &'static str {
     static LONG: std::sync::OnceLock<String> = std::sync::OnceLock::new();
