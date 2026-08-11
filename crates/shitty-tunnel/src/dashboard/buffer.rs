@@ -147,3 +147,140 @@ fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
     let y = if m <= 2 { y + 1 } else { y };
     (y, m, d)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    async fn record(buf: &EventBuffer, path: &str) -> u64 {
+        buf.record_request_started("GET", path, &[], b"").await
+    }
+
+    #[tokio::test]
+    async fn ids_are_unique_and_monotonic() {
+        let buf = EventBuffer::new(10);
+
+        let first = record(&buf, "/a").await;
+        let second = record(&buf, "/b").await;
+
+        assert!(second > first, "correlation depends on ids never repeating");
+    }
+
+    #[tokio::test]
+    async fn a_completed_response_is_attached_to_its_own_request() {
+        let buf = EventBuffer::new(10);
+        let first = record(&buf, "/first").await;
+        let second = record(&buf, "/second").await;
+
+        buf.record_request_completed(second, 404, &[], b"nope", 12.5)
+            .await;
+
+        let (events, _) = buf.snapshot().await;
+        let first_event = events.iter().find(|e| e.id == first).unwrap();
+        let second_event = events.iter().find(|e| e.id == second).unwrap();
+
+        assert!(
+            first_event.response.is_none(),
+            "an unrelated request must stay pending"
+        );
+        assert_eq!(second_event.response.as_ref().unwrap().status, 404);
+        assert_eq!(second_event.duration_ms, Some(12.5));
+    }
+
+    #[tokio::test]
+    async fn completing_an_unknown_id_is_ignored_rather_than_panicking() {
+        let buf = EventBuffer::new(10);
+        record(&buf, "/a").await;
+
+        // Happens when a response arrives after its event was evicted.
+        buf.record_request_completed(9999, 200, &[], b"", 1.0).await;
+
+        let (events, _) = buf.snapshot().await;
+        assert_eq!(events.len(), 1);
+        assert!(events[0].response.is_none());
+    }
+
+    #[tokio::test]
+    async fn the_buffer_evicts_oldest_first_and_never_exceeds_its_cap() {
+        let buf = EventBuffer::new(3);
+
+        for i in 0..5 {
+            record(&buf, &format!("/{i}")).await;
+        }
+
+        let (events, _) = buf.snapshot().await;
+        assert_eq!(events.len(), 3, "cap must hold under sustained load");
+        assert_eq!(
+            events.iter().map(|e| e.id).collect::<Vec<_>>(),
+            vec![3, 4, 5],
+            "the three most recent requests must survive"
+        );
+    }
+
+    #[tokio::test]
+    async fn clear_empties_the_buffer_without_reusing_ids() {
+        let buf = EventBuffer::new(10);
+        let before = record(&buf, "/a").await;
+
+        buf.clear().await;
+        assert!(buf.snapshot().await.0.is_empty());
+
+        let after = record(&buf, "/b").await;
+        assert!(after > before, "ids must not restart after a clear");
+    }
+
+    #[tokio::test]
+    async fn subscribers_receive_start_and_completion_in_order() {
+        let buf = EventBuffer::new(10);
+        let mut rx = buf.subscribe();
+
+        let id = record(&buf, "/watched").await;
+        buf.record_request_completed(id, 200, &[], b"ok", 3.0).await;
+
+        match rx.recv().await.unwrap() {
+            WsMessage::RequestStarted { event } => assert_eq!(event.id, id),
+            other => panic!("expected RequestStarted, got {other:?}"),
+        }
+        match rx.recv().await.unwrap() {
+            WsMessage::RequestCompleted {
+                id: completed,
+                response,
+                ..
+            } => {
+                assert_eq!(completed, id);
+                assert_eq!(response.status, 200);
+            }
+            other => panic!("expected RequestCompleted, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn recording_without_subscribers_does_not_fail() {
+        // `tx.send` errors when nobody is listening; that must stay non-fatal.
+        let buf = EventBuffer::new(10);
+        let id = record(&buf, "/a").await;
+        buf.record_request_completed(id, 200, &[], b"", 1.0).await;
+
+        assert_eq!(buf.snapshot().await.0.len(), 1);
+    }
+
+    #[test]
+    fn the_timestamp_is_iso8601_shaped_at_a_known_date() {
+        // 2026-08-11 as days since epoch, guarding the hand-rolled calendar math.
+        assert_eq!(days_to_ymd(20676), (2026, 8, 11));
+        assert_eq!(days_to_ymd(0), (1970, 1, 1));
+        // Leap day: the civil-from-days algorithm must not drift.
+        assert_eq!(days_to_ymd(59), (1970, 3, 1));
+        assert_eq!(days_to_ymd(11016), (2000, 2, 29));
+    }
+
+    #[test]
+    fn the_formatted_timestamp_has_the_expected_layout() {
+        let ts = chrono_iso8601_now();
+
+        assert_eq!(ts.len(), 24, "YYYY-MM-DDTHH:MM:SS.mmmZ — got {ts}");
+        assert!(ts.ends_with('Z'));
+        assert_eq!(&ts[4..5], "-");
+        assert_eq!(&ts[10..11], "T");
+    }
+}
