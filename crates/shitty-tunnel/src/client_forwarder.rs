@@ -2,6 +2,30 @@ use base64::Engine;
 use st_domain::model::request::{ProxiedRequest, ProxiedResponse};
 use st_infra::config::client::{AddHeaders, RemoveHeaders};
 
+/// Headers that belong to a single hop and must never be relayed, plus the
+/// framing headers hyper has already resolved on our behalf: it de-chunks the
+/// body but leaves `transfer-encoding: chunked` in place, and re-frames length
+/// itself downstream.
+///
+/// `content-encoding` is deliberately absent: reqwest is built without the
+/// gzip/brotli/deflate/zstd features, so the body reaches us still encoded and
+/// the header is accurate. Stripping it would hand raw gzip to the caller
+/// labelled as plaintext. Both behaviours are pinned in tests/passthrough.rs.
+fn is_hop_by_hop(lower_name: &str) -> bool {
+    matches!(
+        lower_name,
+        "connection"
+            | "keep-alive"
+            | "transfer-encoding"
+            | "content-length"
+            | "upgrade"
+            | "te"
+            | "trailer"
+            | "proxy-authenticate"
+            | "proxy-authorization"
+    )
+}
+
 pub async fn forward(
     client: &reqwest::Client,
     base_url: &str,
@@ -40,7 +64,16 @@ pub async fn forward(
     }
 
     let url = format!("{}{}", base_url, req.uri);
-    let method = reqwest::Method::from_bytes(req.method.as_bytes()).unwrap_or(reqwest::Method::GET);
+    // Falling back to GET would silently turn an unparseable method into a
+    // different, successful request against the local service.
+    let Ok(method) = reqwest::Method::from_bytes(req.method.as_bytes()) else {
+        return ProxiedResponse {
+            request_id: req.request_id,
+            status: 400,
+            headers: vec![("content-type".to_string(), "text/plain".to_string())],
+            body: format!("invalid request method: {}", req.method).into_bytes(),
+        };
+    };
 
     let start = std::time::Instant::now();
 
@@ -52,12 +85,8 @@ pub async fn forward(
 
     for (key, value) in &req.headers {
         let lower = key.to_lowercase();
-        // Skip hop-by-hop headers
-        if lower == "host"
-            || lower == "connection"
-            || lower == "transfer-encoding"
-            || lower == "keep-alive"
-        {
+        // `host` is rebuilt by reqwest for the local target.
+        if lower == "host" || is_hop_by_hop(&lower) {
             continue;
         }
         if remove_set.contains(&lower) {
@@ -80,11 +109,16 @@ pub async fn forward(
     match builder.send().await {
         Ok(resp) => {
             let status = resp.status().as_u16();
+            // HeaderName is always lowercase, so no normalisation is needed here.
             let mut headers: Vec<(String, String)> = resp
                 .headers()
                 .iter()
-                .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
-                .filter(|(k, _)| !remove_set.contains(&k.to_lowercase()))
+                .filter(|(k, _)| {
+                    !is_hop_by_hop(k.as_str()) && !remove_set.iter().any(|r| r == k.as_str())
+                })
+                // A non-UTF8 value cannot be relayed; forwarding it as "" would
+                // turn a malformed header into a plausible empty one.
+                .filter_map(|(k, v)| Some((k.to_string(), v.to_str().ok()?.to_string())))
                 .collect();
 
             // Inject/overwrite configured response headers
@@ -112,7 +146,21 @@ pub async fn forward(
                 };
             }
 
-            let body = resp.bytes().await.unwrap_or_default().to_vec();
+            // A failure here means the local service died mid-body. Defaulting to
+            // an empty body would relay its status (typically 200) with no
+            // content, which reads as a successful empty page.
+            let body = match resp.bytes().await {
+                Ok(b) => b.to_vec(),
+                Err(e) => {
+                    tracing::error!("{} {} -> body read failed: {e}", method, req.uri);
+                    return ProxiedResponse {
+                        request_id: req.request_id,
+                        status: 502,
+                        headers: vec![("content-type".to_string(), "text/plain".to_string())],
+                        body: format!("local service response truncated: {e}").into_bytes(),
+                    };
+                }
+            };
             if body.len() > max_body_size {
                 return ProxiedResponse {
                     request_id: req.request_id,
