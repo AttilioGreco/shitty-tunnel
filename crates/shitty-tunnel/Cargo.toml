@@ -36,6 +36,11 @@ mime_guess = { workspace = true }
 toml = { workspace = true }
 url = { workspace = true }
 
+[dev-dependencies]
+# `net` unlocks TcpListenerStream, so the e2e test can hand tonic a listener
+# already bound to an ephemeral port instead of racing for a fixed one.
+tokio-stream = { workspace = true, features = ["net"] }
+
 # Metadata for cargo-dist installers
 [package.metadata.dist]
 # Include example configs in releases
