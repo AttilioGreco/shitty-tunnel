@@ -8,7 +8,7 @@ cargo-dist-version = "0.30.3"
 # CI backends to support
 ci = "github"
 # The installers to generate for each app
-installers = ["shell", "powershell", "homebrew"]
+installers = ["shell", "powershell", "homebrew", "msi", "pkg"]
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "aarch64-unknown-linux-musl", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-unknown-linux-musl", "x86_64-pc-windows-msvc"]
 # Whether to consider the binaries in a package for distribution (defaults true)
@@ -24,6 +24,10 @@ pr-run-mode = "skip"
 install-path = ["$SHITTY_TUNNEL_INSTALL_DIR/", "~/.local/bin"]
 # Whether to install an updater program
 install-updater = true
+
+# macOS .pkg installer (defaults to /usr/local -> binary lands in /usr/local/bin)
+[dist.mac-pkg-config]
+identifier = "it.crazylinux.shitty-tunnel"
 
 # Use native ARM runners instead of QEMU for aarch64 Linux targets
 [dist.github-custom-runners]
