@@ -34,6 +34,13 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+# Every confirmation below treats an empty answer as "yes", which is a sensible
+# default at a terminal but means a piped or redirected run auto-approves the
+# commit, the tag and the push without anyone agreeing to any of them.
+if [ ! -t 0 ]; then
+    error "Run this from a terminal: the confirmation prompts read as 'yes' on empty input."
+fi
+
 # Validate version format (semver)
 if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
     error "Invalid version format. Expected: X.Y.Z or X.Y.Z-prerelease"
@@ -61,6 +68,69 @@ if [ "$CURRENT_BRANCH" != "main" ]; then
         error "Release cancelled"
     fi
 fi
+
+# Preconditions.
+#
+# Everything below this block edits files, runs the test suite and builds two
+# images before it ever reaches `git tag`. A release that cannot succeed must
+# be rejected here, while the tree is still untouched — otherwise a rejected
+# run leaves a bump commit, a rewritten CHANGELOG and a rewound version behind,
+# and the next attempt starts from that mess.
+CURRENT_VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+
+if [ -z "$CURRENT_VERSION" ]; then
+    error "Could not read the current version from Cargo.toml"
+fi
+
+if git rev-parse -q --verify "refs/tags/${TAG}" > /dev/null; then
+    error "Tag ${TAG} already exists locally. Releases are immutable — pick a higher version."
+fi
+
+if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" > /dev/null 2>&1; then
+    error "Tag ${TAG} already exists on origin. Releases are immutable — pick a higher version."
+fi
+
+# Compare against the highest tag as well as Cargo.toml, not just Cargo.toml.
+# A failed release can leave the manifest rewound to an old version, and then
+# any number above that rewound value looks new while actually being a
+# re-release — the tag check only catches it if that exact tag exists.
+HIGHEST_TAG=$(git tag --list 'v*' | sed 's/^v//' | sort -V | tail -1)
+FLOOR="$CURRENT_VERSION"
+if [ -n "$HIGHEST_TAG" ] && \
+   [ "$(printf '%s\n%s\n' "$CURRENT_VERSION" "$HIGHEST_TAG" | sort -V | tail -1)" = "$HIGHEST_TAG" ]; then
+    FLOOR="$HIGHEST_TAG"
+fi
+
+# `sort -V` orders release versions correctly; it does not implement semver
+# prerelease precedence, so X.Y.Z-rc1 sorts after X.Y.Z. Good enough to catch
+# the failure that actually happens: re-releasing an old number.
+if [ "$VERSION" = "$FLOOR" ] || \
+   [ "$(printf '%s\n%s\n' "$FLOOR" "$VERSION" | sort -V | tail -1)" != "$VERSION" ]; then
+    if [ "$FLOOR" = "$CURRENT_VERSION" ]; then
+        error "Version ${VERSION} is not newer than the current ${CURRENT_VERSION}."
+    fi
+    error "Version ${VERSION} is not newer than the highest released ${FLOOR} (Cargo.toml says ${CURRENT_VERSION} — a previous release probably failed midway)."
+fi
+
+if grep -q "^## \[${VERSION}\]" CHANGELOG.md; then
+    error "CHANGELOG.md already has an entry for ${VERSION}."
+fi
+
+success "Preconditions passed (current version: ${CURRENT_VERSION})"
+
+# Undo the bump commit if the release fails between committing and tagging.
+# Outside that window there is nothing to undo: before it no commit exists,
+# after it the tag refers to the commit and removing it would orphan the tag.
+BUMP_COMMIT=""
+TAGGED=false
+rollback_bump_commit() {
+    [ -n "$BUMP_COMMIT" ] || return 0
+    [ "$TAGGED" = false ] || return 0
+    [ "$(git rev-parse HEAD)" = "$BUMP_COMMIT" ] || return 0
+    warn "Release failed after committing — removing the bump commit"
+    git reset --hard HEAD~1 > /dev/null
+}
+trap rollback_bump_commit EXIT
 
 # Helper to revert file changes on failure
 revert_files() {
@@ -164,6 +234,7 @@ fi
 info "Creating commit..."
 git add Cargo.toml Cargo.lock CHANGELOG.md dist-workspace.toml .github/workflows/release.yml
 if git commit -m "chore: bump version to ${TAG}"; then
+    BUMP_COMMIT=$(git rev-parse HEAD)
     success "Commit created"
 else
     error "Failed to create commit"
@@ -191,6 +262,7 @@ fi
 # 11. Create git tag — last git operation before push
 info "Creating tag ${TAG}..."
 if git tag -a "$TAG" -m "Release ${TAG}"; then
+    TAGGED=true
     success "Tag created: ${TAG}"
 else
     error "Failed to create tag"
